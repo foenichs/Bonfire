@@ -48,9 +48,9 @@ class ProtectionService(private val registry: ClaimRegistry) {
     }
 
     /**
-     * Logic for natural growth (Trees, Fire, Fertilization)
+     * Checks allowBlockBreak for a block
      */
-    fun isGrowthAllowed(targetChunk: Chunk): Boolean {
+    fun checkAllowBlockBreak(targetChunk: Chunk): Boolean {
         val claim = registry.getAt(targetChunk) ?: return true
         return claim.allowBlockBreak
     }

@@ -22,7 +22,7 @@ class WorldProtectionListener(
     fun onLiquidFlow(event: BlockFromToEvent) {
         val toBlock = event.toBlock
         if (toBlock.isEmpty || toBlock.isLiquid) return
-        if (!protection.isGrowthAllowed(toBlock.chunk)) {
+        if (!protection.checkAllowBlockBreak(toBlock.chunk)) {
             event.isCancelled = true
         }
     }
@@ -33,7 +33,7 @@ class WorldProtectionListener(
     @EventHandler(priority = EventPriority.LOWEST, ignoreCancelled = true)
     fun onFireSpread(event: BlockSpreadEvent) {
         if (event.source.type != Material.FIRE) return
-        if (!protection.isGrowthAllowed(event.block.chunk)) {
+        if (!protection.checkAllowBlockBreak(event.block.chunk)) {
             event.isCancelled = true
         }
     }
@@ -43,7 +43,7 @@ class WorldProtectionListener(
      */
     @EventHandler(priority = EventPriority.LOWEST, ignoreCancelled = true)
     fun onBlockBurn(event: BlockBurnEvent) {
-        if (!protection.isGrowthAllowed(event.block.chunk)) {
+        if (!protection.checkAllowBlockBreak(event.block.chunk)) {
             event.isCancelled = true
         }
     }
@@ -63,7 +63,7 @@ class WorldProtectionListener(
             // Only block if moving from outside into a protected claim
             if (!protection.isWorldActionAllowed(
                     sourceChunk, targetChunk
-                ) && !protection.isGrowthAllowed(targetChunk)
+                ) && !protection.checkAllowBlockBreak(targetChunk)
             ) {
                 event.isCancelled = true
                 return
@@ -85,7 +85,7 @@ class WorldProtectionListener(
 
             if (!protection.isWorldActionAllowed(
                     sourceChunk, targetChunk
-                ) && !protection.isGrowthAllowed(targetChunk)
+                ) && !protection.checkAllowBlockBreak(targetChunk)
             ) {
                 iterator.remove()
             }

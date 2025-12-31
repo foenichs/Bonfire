@@ -111,12 +111,7 @@ class EntityProtectionListener(
         if (claim.allowEntityInteract == "false") {
             event.isCancelled = true
         } else if (claim.allowEntityInteract == "onlyMounts") {
-            val mountable = listOf(
-                AbstractHorse::class, Pig::class, Strider::class, Boat::class,
-                Minecart::class, Camel::class, Llama::class
-            )
-            // If the entity isn't mountable, block it
-            if (mountable.none { it.isInstance(entity) }) {
+            if (entity !is Vehicle && entity !is Steerable) {
                 event.isCancelled = true
             }
         }
