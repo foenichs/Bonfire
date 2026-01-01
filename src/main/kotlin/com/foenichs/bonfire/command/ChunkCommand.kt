@@ -25,7 +25,7 @@ class ChunkCommand(
             val canClaim =
                 registry.getAt(p.location.chunk) == null && registry.getOwnedChunks(p.uniqueId) < limits.getLimits(p).maxChunks
 
-            if (!canClaim && !isOwner(p) && !p.isOp) {
+            if (!canClaim && !isOwner(p)) {
                 msg.sendNoAccess(p)
             } else {
                 ctx.source.sender.sendMessage(Component.text("Usage: /chunk <subcommand>", NamedTextColor.RED))
@@ -57,7 +57,8 @@ class ChunkCommand(
                                 ); 1
                             })
                     )
-            ).then(
+            )
+            .then(
                 Commands.literal("addplayer").requires { it.sender.hasPermission("bonfire.command.owner") }
                     .then(
                         Commands.argument("target", StringArgumentType.word()).suggests { ctx, b ->
@@ -81,14 +82,15 @@ class ChunkCommand(
                         })
                     )
             ).then(
-                Commands.literal("removeplayer").requires { it.sender.hasPermission("bonfire.command.removeplayer") }.then(Commands.argument("target", StringArgumentType.word()).suggests { ctx, b ->
-                    val c = registry.getAt((ctx.source.sender as Player).location.chunk)
-                    c?.trustedAlways?.forEach { id -> Bukkit.getOfflinePlayer(id).name?.let { b.suggest(it) } }
-                    c?.trustedOnline?.forEach { id -> Bukkit.getOfflinePlayer(id).name?.let { b.suggest(it) } }
-                    b.buildFuture()
-                }.executes { ctx ->
-                    service.removeTrust(ctx.source.sender as Player, StringArgumentType.getString(ctx, "target")); 1
-                })
+                Commands.literal("removeplayer").requires { it.sender.hasPermission("bonfire.command.removeplayer") }.then(
+                    Commands.argument("target", StringArgumentType.word()).suggests { ctx, b ->
+                        val c = registry.getAt((ctx.source.sender as Player).location.chunk)
+                        c?.trustedAlways?.forEach { id -> Bukkit.getOfflinePlayer(id).name?.let { b.suggest(it) } }
+                        c?.trustedOnline?.forEach { id -> Bukkit.getOfflinePlayer(id).name?.let { b.suggest(it) } }
+                        b.buildFuture()
+                    }.executes { ctx ->
+                        service.removeTrust(ctx.source.sender as Player, StringArgumentType.getString(ctx, "target")); 1
+                    })
             )
 
         registrar.register(node.build(), "The core command of Bonfire.")

@@ -90,20 +90,21 @@ class VisualService(
         val chunk = player.location.chunk
         val claim = registry.getAt(chunk)
 
+        // Only show claim if in wilderness and under limit
         val canClaim = claim == null && registry.getOwnedChunks(player.uniqueId) < limits.getLimits(player).maxChunks
-        val isOwner = claim?.owner == player.uniqueId || (protection.canBypass(player, chunk) && claim != null)
 
-        // Check if there are actually players to remove
-        val canRemove = isOwner && (claim.trustedAlways.isNotEmpty() || claim.trustedOnline.isNotEmpty())
+        // Only show management subcommands for the owner
+        val isStrictOwner = claim != null && claim.owner == player.uniqueId
+        val canRemove = isStrictOwner && (claim.trustedAlways.isNotEmpty() || claim.trustedOnline.isNotEmpty())
 
         val changedClaim = attachment.permissions.getOrDefault("bonfire.command.claim", false) != canClaim
-        val changedOwner = attachment.permissions.getOrDefault("bonfire.command.owner", false) != isOwner
+        val changedOwner = attachment.permissions.getOrDefault("bonfire.command.owner", false) != isStrictOwner
         val changedRemove = attachment.permissions.getOrDefault("bonfire.command.removeplayer", false) != canRemove
 
         // Only rebuild the command tree if the permission status actually changed
         if (changedClaim || changedOwner || changedRemove) {
             attachment.setPermission("bonfire.command.claim", canClaim)
-            attachment.setPermission("bonfire.command.owner", isOwner)
+            attachment.setPermission("bonfire.command.owner", isStrictOwner)
             attachment.setPermission("bonfire.command.removeplayer", canRemove)
             player.updateCommands()
         }

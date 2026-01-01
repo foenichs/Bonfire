@@ -41,7 +41,7 @@ class PlayerListener(
     }
 
     /**
-     * Refreshes the player and others when joining
+     * Initializes state on join and refreshes affected players
      */
     @EventHandler
     fun onJoin(event: PlayerJoinEvent) {

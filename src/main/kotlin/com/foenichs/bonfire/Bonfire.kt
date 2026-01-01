@@ -9,6 +9,8 @@ import com.foenichs.bonfire.storage.DatabaseManager
 import com.foenichs.bonfire.ui.Messenger
 import io.papermc.paper.plugin.lifecycle.event.types.LifecycleEvents
 import org.bukkit.Bukkit
+import org.bukkit.permissions.Permission
+import org.bukkit.permissions.PermissionDefault
 import org.bukkit.plugin.java.JavaPlugin
 
 class Bonfire : JavaPlugin() {
@@ -20,6 +22,9 @@ class Bonfire : JavaPlugin() {
     override fun onEnable() {
         // Initialize Configuration
         saveDefaultConfig()
+
+        // Register custom permissions with a default of false to exclude Operators
+        registerPermissions()
 
         // Initialize Database and Memory Cache
         db = DatabaseManager(dataFolder)
@@ -61,6 +66,24 @@ class Bonfire : JavaPlugin() {
         // Ensure database connection is closed safely
         if (::db.isInitialized) {
             db.close()
+        }
+    }
+
+    /**
+     * Registers command permissions to override the default Operator access
+     */
+    private fun registerPermissions() {
+        val pm = Bukkit.getPluginManager()
+        val permissions = listOf(
+            "bonfire.command.claim",
+            "bonfire.command.owner",
+            "bonfire.command.removeplayer"
+        )
+
+        permissions.forEach { node ->
+            if (pm.getPermission(node) == null) {
+                pm.addPermission(Permission(node, PermissionDefault.FALSE))
+            }
         }
     }
 }
