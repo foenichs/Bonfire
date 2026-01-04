@@ -28,6 +28,7 @@ class Bonfire : JavaPlugin() {
         // Initialize Services
         val messenger = Messenger()
         val limitService = LimitService(config, registry)
+        val blueMapService = BlueMapService(this, registry)
         protectionService = ProtectionService(registry)
         visualService = VisualService(this, registry, protectionService, limitService)
 
@@ -35,7 +36,7 @@ class Bonfire : JavaPlugin() {
         val playerListener = PlayerListener(this, registry, messenger, visualService)
 
         // Initialize Logic Service
-        val claimService = ClaimService(registry, db, messenger, limitService, visualService, playerListener)
+        val claimService = ClaimService(registry, db, messenger, limitService, visualService, playerListener, blueMapService)
 
         // Register Command Tree
         lifecycleManager.registerEventHandler(LifecycleEvents.COMMANDS) { event ->

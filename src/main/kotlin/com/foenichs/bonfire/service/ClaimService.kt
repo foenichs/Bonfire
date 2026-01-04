@@ -20,11 +20,15 @@ class ClaimService(
     private val msg: Messenger,
     private val limits: LimitService,
     private val visualService: VisualService,
-    private val playerListener: PlayerListener
+    private val playerListener: PlayerListener,
+    private val blueMapService: BlueMapService
 ) {
     data class PendingMerge(val worldUuid: UUID, val chunkKey: Long, val claims: List<Claim>, val time: Long)
     private val pending = mutableMapOf<UUID, PendingMerge>()
 
+    /**
+     * Claiming a chunk and either adding it to a claim or creating a new claim
+     */
     fun tryClaim(p: Player) {
         val ch = p.location.chunk; val w = ch.world.uid; val k = ch.chunkKey; val limits = limits.getLimits(p)
         if (registry.getAt(w, k) != null) return
@@ -38,6 +42,7 @@ class ClaimService(
         when {
             adj.size == 1 -> {
                 val c = adj.first(); val pos = ChunkPos(w, k); c.chunks.add(pos); db.addChunk(c.id!!, pos)
+                blueMapService.updateClaim(c)
                 msg.send(p, Component.text("Successfully claimed this chunk and added it to your claim."))
                 finishAction(p, c.owner)
             }
@@ -56,6 +61,7 @@ class ClaimService(
                 } else {
                     val id = db.createClaim(p.uniqueId); val pos = ChunkPos(w, k); val claim = Claim(id, p.uniqueId, mutableSetOf(pos))
                     registry.add(claim); db.addChunk(id, pos)
+                    blueMapService.updateClaim(claim)
                     msg.send(p, Component.text("Successfully claimed this chunk and created a new claim."))
                     finishAction(p, claim.owner)
                 }
@@ -63,14 +69,20 @@ class ClaimService(
         }
     }
 
+    /**
+     * Unclaiming a chunk and either removing it from the claim or deleting the claim
+     */
     fun tryUnclaim(p: Player) {
         val ch = p.location.chunk; val pos = ChunkPos(ch.world.uid, ch.chunkKey); val c = registry.getAt(pos.worldUuid, pos.chunkKey) ?: return
         if (c.chunks.size <= 1) {
-            db.deleteClaim(c.id!!); registry.remove(c)
+            val wid = c.chunks.first().worldUuid; val id = c.id!!
+            db.deleteClaim(id); registry.remove(c)
+            blueMapService.removeClaim(id, wid)
             msg.send(p, Component.text("Successfully unclaimed this chunk and deleted the claim."))
             finishAction(p, null)
         } else if (isConnected(c, pos)) {
             c.chunks.remove(pos); db.removeChunk(c.id!!, pos)
+            blueMapService.updateClaim(c)
             msg.send(p, Component.text("Successfully unclaimed this chunk and removed it from your claim."))
             finishAction(p, null)
         } else {
@@ -96,6 +108,17 @@ class ClaimService(
         }
     }
 
+    /**
+     * Update visuals for all players in the entire claim
+     */
+    private fun finishActionForClaim(c: Claim) {
+        Bukkit.getOnlinePlayers().forEach { onlinePlayer ->
+            if (registry.getAt(onlinePlayer.location.chunk)?.id == c.id) {
+                visualService.updateValues(onlinePlayer)
+            }
+        }
+    }
+
     private fun isConnected(c: Claim, r: ChunkPos): Boolean {
         val rem = c.chunks.filter { it != r }; if (rem.isEmpty()) return true
         val start = rem.first(); val vis = mutableSetOf<ChunkPos>(); val q: Queue<ChunkPos> = LinkedList(); q.add(start); vis.add(start)
@@ -108,6 +131,9 @@ class ClaimService(
         return vis.size == rem.size
     }
 
+    /**
+     * Change a claim rule
+     */
     fun setRule(p: Player, r: String, v: String) {
         val c = registry.getAt(p.location.chunk) ?: return
         if (r == "allowEntityInteract" && v != "true" && v != "false" && v != "onlyMounts") return
@@ -120,10 +146,15 @@ class ClaimService(
             else -> ""
         }
         msg.send(p, Component.text().append(Component.text("Set $r to $v. ")).append(Component.text(desc, NamedTextColor.GRAY)).build())
+
+        // Refresh commands for the sender and visuals for everyone
         visualService.updateValues(p)
-        Bukkit.getOnlinePlayers().filter { registry.getAt(it.location.chunk)?.id == c.id }.forEach { visualService.updateValues(it) }
+        finishActionForClaim(c)
     }
 
+    /**
+     * Add players to claims
+     */
     fun addTrust(p: Player, n: String, t: String) {
         val c = registry.getAt(p.location.chunk) ?: return
         val off = Bukkit.getOfflinePlayers().find { it.name?.equals(n, true) == true }
@@ -139,27 +170,41 @@ class ClaimService(
         else { c.trustedOnline.add(off.uniqueId); db.addTrust(c.id!!, off.uniqueId, "WHILE_ONLINE") }
         val desc = if (t == "always") "They aren't affected by claim rules anymore, even when you're not online." else "While you're online, they aren't affected by claim rules anymore."
         msg.send(p, Component.text().append(Component.text("Added ")).append(msg.head(n)).append(Component.space()).append(Component.text(n, NamedTextColor.WHITE, TextDecoration.BOLD)).append(Component.text(" to your claim. ")).append(Component.text(desc, NamedTextColor.GRAY)).build())
-        visualService.updateValues(p)
-        off.player?.let { if (registry.getAt(it.location.chunk)?.id == c.id) { visualService.updateValues(it) } }
+
+        // Update visuals for everyone in the claim and the target if they are online
+        finishActionForClaim(c)
+        off.player?.let { visualService.updateValues(it) }
     }
 
+    /**
+     * Remove added players from claims
+     */
     fun removeTrust(p: Player, n: String) {
         val c = registry.getAt(p.location.chunk) ?: return
         val id = Bukkit.getOfflinePlayers().find { it.name?.equals(n, true) == true }?.uniqueId ?: return
         if (c.trustedAlways.remove(id) || c.trustedOnline.remove(id)) {
             db.removeTrust(c.id!!, id)
             msg.send(p, Component.text().append(Component.text("Removed ")).append(msg.head(n)).append(Component.space()).append(Component.text(n, NamedTextColor.WHITE, TextDecoration.BOLD)).append(Component.text(" from your claim.")).build())
-            visualService.updateValues(p)
-            Bukkit.getPlayer(id)?.let { if (registry.getAt(it.location.chunk)?.id == c.id) { visualService.updateValues(it) } }
+
+            finishActionForClaim(c)
+            Bukkit.getPlayer(id)?.let { visualService.updateValues(it) }
         }
     }
 
+    /**
+     * Merges two claims
+     */
     private fun executeMerge(p: Player, m: PendingMerge) {
         val main = m.claims.first(); val pos = ChunkPos(m.worldUuid, m.chunkKey)
         db.addChunk(main.id!!, pos); main.chunks.add(pos)
-        m.claims.drop(1).forEach { d -> db.moveChunks(d.id!!, main.id!!); db.deleteClaim(d.id!!); main.chunks.addAll(d.chunks); main.trustedAlways.addAll(d.trustedAlways); main.trustedOnline.addAll(d.trustedOnline); registry.remove(d) }
+        m.claims.drop(1).forEach { d ->
+            val wid = d.chunks.first().worldUuid; val id = d.id!!
+            db.moveChunks(id, main.id!!); db.deleteClaim(id); main.chunks.addAll(d.chunks); main.trustedAlways.addAll(d.trustedAlways); main.trustedOnline.addAll(d.trustedOnline)
+            registry.remove(d); blueMapService.removeClaim(id, wid)
+        }
+        blueMapService.updateClaim(main)
         msg.send(p, Component.text("Successfully merged your claims.")); finishAction(p, main.owner)
-        Bukkit.getOnlinePlayers().filter { registry.getAt(it.location.chunk)?.id == main.id }.forEach { visualService.updateValues(it) }
+        finishActionForClaim(main)
     }
 
     private fun findAdj(p: Player, w: UUID, x: Int, z: Int) = registry.getAll().filter { c -> c.owner == p.uniqueId && c.chunks.any { cp -> cp.worldUuid == w && listOf(Chunk.getChunkKey(x+1,z), Chunk.getChunkKey(x-1,z), Chunk.getChunkKey(x,z+1), Chunk.getChunkKey(x,z-1)).contains(cp.chunkKey) } }

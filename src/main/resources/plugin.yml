@@ -1,8 +1,9 @@
 name: Bonfire
-version: '1.0'
+version: '1.1'
 main: com.foenichs.bonfire.Bonfire
 api-version: '1.21'
 prefix: Bonfire
 authors: [ foenichs ]
 description: Easily claim chunks and manage how others can interact with them.
 website: foenichs.com
+softdepend: [BlueMap]

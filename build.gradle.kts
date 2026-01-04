@@ -5,18 +5,22 @@ plugins {
 }
 
 group = "com.foenichs"
-version = "1.0"
+version = "1.1"
 
 repositories {
     mavenCentral()
     maven("https://repo.papermc.io/repository/maven-public/") {
         name = "papermc-repo"
     }
+    maven("https://repo.bluecolored.de/releases")
 }
 
 dependencies {
     compileOnly("io.papermc.paper:paper-api:1.21.11-R0.1-SNAPSHOT")
     implementation("org.jetbrains.kotlin:kotlin-stdlib-jdk8")
+
+    compileOnly("de.bluecolored:bluemap-api:2.7.7")
+    compileOnly("com.flowpowered:flow-math:1.0.3")
 }
 
 tasks {
