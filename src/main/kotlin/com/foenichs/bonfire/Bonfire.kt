@@ -1,5 +1,6 @@
 package com.foenichs.bonfire
 
+import com.foenichs.bonfire.command.BonfireCommand
 import com.foenichs.bonfire.command.ChunkCommand
 import com.foenichs.bonfire.listener.PlayerListener
 import com.foenichs.bonfire.listener.protection.*
@@ -36,11 +37,16 @@ class Bonfire : JavaPlugin() {
         val playerListener = PlayerListener(this, registry, messenger, visualService)
 
         // Initialize Logic Service
-        val claimService = ClaimService(registry, db, messenger, limitService, visualService, playerListener, blueMapService)
+        val claimService = ClaimService(registry, db, messenger, limitService, visualService, playerListener, blueMapService, this)
 
         // Register Command Tree
         lifecycleManager.registerEventHandler(LifecycleEvents.COMMANDS) { event ->
             ChunkCommand(claimService, registry, limitService, messenger).register(event.registrar())
+            BonfireCommand {
+                reloadConfig()
+                limitService.updateConfig(config)
+                blueMapService.refreshAll()
+            }.register(event.registrar())
         }
 
         // Register Event Listeners

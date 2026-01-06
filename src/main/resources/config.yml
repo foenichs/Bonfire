@@ -1,20 +1,37 @@
+# Default rules for newly created claims
+default-rules:
+  allowBlockBreak: false
+  allowBlockInteract: false
+  allowEntityInteract: false
+
 # Claiming Limits Configuration
 limits:
   # If set to false, claiming isn't limited at all
   enabled: true
-
   # Base values every player starts with
   starting-values:
     chunks: 0
     claims: 1
-
   # Earning additional chunks and claims based on playtime
   playtime-earning:
     enabled: true
     minutes-per-chunk: 60
     minutes-per-claim: 1440 # 24 hours
-
   # Absolute hard caps (use -1 for no limit)
   maximum:
     chunks: -1
     claims: 5
+
+# Configs for BlueMap claim markers, if BlueMap is installed
+bluemap:
+  # If set to false, markers don't show at all
+  enable-markers: true
+  # Whether claim markers should be listed in BlueMap's marker menu
+  # This allows players to easily find all claims that exist in a world
+  list-markers: false
+  # $name gets replaced with the name of the claim owner
+  label: Claimed by $name
+  # The accent RGB color of markers
+  accent-color: 255, 221, 161
+  # If the camera is further to this marker than this distance, it will be hidden
+  view-distance: 1000

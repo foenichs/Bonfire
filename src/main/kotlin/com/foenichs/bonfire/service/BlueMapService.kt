@@ -11,6 +11,8 @@ import de.bluecolored.bluemap.api.math.Color
 import de.bluecolored.bluemap.api.math.Shape
 import org.bukkit.Bukkit
 import java.util.*
+import kotlin.collections.ArrayList
+import kotlin.collections.HashSet
 import kotlin.math.abs
 
 class BlueMapService(
@@ -21,10 +23,6 @@ class BlueMapService(
     private var api: BlueMapAPI? = null
     private val markerSetId = "bonfire_claims"
     private val markerSetLabel = "Bonfire Claims"
-
-    // Pastel Gold
-    private val colorLine = Color(255, 221, 161, 0.4f)
-    private val colorFill = Color(255, 231, 161, 0.1f)
 
     init {
         BlueMapAPI.onEnable { bluemap ->
@@ -52,21 +50,29 @@ class BlueMapService(
             if (worldId == null) return@forEach
 
             blueMap.getWorld(worldId).ifPresent { world ->
-                val markerSet = world.maps.firstOrNull()?.markerSets?.getOrPut(markerSetId) {
-                    MarkerSet.builder().label(markerSetLabel).build()
-                } ?: return@ifPresent
-
-                markerSet.markers.clear()
-
-                claims.forEach { claim ->
-                    try {
-                        createMarker(markerSet, claim)
-                    } catch (_: ArrayStoreException) {
-                        // Use the plugin's logger instead of Bukkit.getLogger()
-                        plugin.logger.severe("[Bonfire] Dependency Error: flow-math library is conflicting.")
+                world.maps.forEach { map ->
+                    // Config Check
+                    if (!plugin.config.getBoolean("bluemap.enable-markers", true)) {
+                        map.markerSets.remove(markerSetId)
                         return@forEach
-                    } catch (e: Exception) {
-                        e.printStackTrace()
+                    }
+
+                    // If enabled, get or create the set
+                    val markerSet = map.markerSets.getOrPut(markerSetId) {
+                        MarkerSet.builder().label(markerSetLabel).build()
+                    }
+
+                    markerSet.markers.clear()
+
+                    claims.forEach { claim ->
+                        try {
+                            createMarker(markerSet, claim)
+                        } catch (_: ArrayStoreException) {
+                            plugin.logger.severe("[Bonfire] Dependency Error: flow-math library is conflicting.")
+                            return@forEach
+                        } catch (e: Exception) {
+                            e.printStackTrace()
+                        }
                     }
                 }
             }
@@ -79,6 +85,9 @@ class BlueMapService(
     fun updateClaim(claim: Claim) {
         val blueMap = api ?: return
         val worldId = claim.chunks.firstOrNull()?.worldUuid ?: return
+
+        // Config Check
+        if (!plugin.config.getBoolean("bluemap.enable-markers", true)) return
 
         blueMap.getWorld(worldId).ifPresent { world ->
             world.maps.forEach { map ->
@@ -113,25 +122,40 @@ class BlueMapService(
     private fun createMarker(markerSet: MarkerSet, claim: Claim) {
         val polygonData = tracePolygon(claim) ?: return
         val ownerName = Bukkit.getOfflinePlayer(claim.owner).name ?: "Unknown"
-        val claimName = "Claimed by $ownerName"
+
+        // Load configs
+        val labelTemplate = plugin.config.getString("bluemap.label", $$"Claimed by $name")!!
+        val label = labelTemplate.replace($$"$name", ownerName)
+        val listed = plugin.config.getBoolean("bluemap.list-markers", false)
+        val viewDist = plugin.config.getDouble("bluemap.view-distance", 1000.0)
+
+        // Parse color from config
+        val colorLine = getAccentColor(0.4f)
+        val colorFill = getAccentColor(0.1f)
 
         // Convert the List<Shape> to typed Array<Shape> for vararg method
         val holesArray = polygonData.holes.toTypedArray()
 
         val marker =
             ExtrudeMarker.builder()
-                .label(claimName)
+                .label(label)
                 .shape(polygonData.outerShape, -64f, 320f)
                 .lineColor(colorLine)
                 .fillColor(colorFill)
                 .depthTestEnabled(true)
-                .lineWidth(2).listed(false)
+                .lineWidth(2)
+                .listed(listed)
                 .minDistance(10.0)
-                .maxDistance(1000.0)
+                .maxDistance(viewDist)
                 .holes(*holesArray)
                 .build()
 
         markerSet.put("claim_${claim.id}", marker)
+    }
+
+    private fun getAccentColor(alpha: Float): Color {
+        val rgb = plugin.config.getString("bluemap.accent-color", "255, 221, 161")!!.split(",").mapNotNull { it.trim().toIntOrNull() }
+        return if (rgb.size == 3) Color(rgb[0], rgb[1], rgb[2], alpha) else Color(255, 221, 161, alpha)
     }
 
     private data class PolygonData(val outerShape: Shape, val holes: List<Shape>)

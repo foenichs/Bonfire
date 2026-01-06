@@ -1,5 +1,6 @@
 package com.foenichs.bonfire.service
 
+import com.foenichs.bonfire.Bonfire
 import com.foenichs.bonfire.listener.PlayerListener
 import com.foenichs.bonfire.model.ChunkPos
 import com.foenichs.bonfire.model.Claim
@@ -21,7 +22,8 @@ class ClaimService(
     private val limits: LimitService,
     private val visualService: VisualService,
     private val playerListener: PlayerListener,
-    private val blueMapService: BlueMapService
+    private val blueMapService: BlueMapService,
+    private val plugin: Bonfire
 ) {
     data class PendingMerge(val worldUuid: UUID, val chunkKey: Long, val claims: List<Claim>, val time: Long)
     private val pending = mutableMapOf<UUID, PendingMerge>()
@@ -59,8 +61,16 @@ class ClaimService(
                     msg.send(p, Component.text().append(Component.text("You've reached your claim limit. "))
                         .append(Component.text("Keep playing to earn more chunks and claims.", NamedTextColor.GRAY)).build())
                 } else {
-                    val id = db.createClaim(p.uniqueId); val pos = ChunkPos(w, k); val claim = Claim(id, p.uniqueId, mutableSetOf(pos))
-                    registry.add(claim); db.addChunk(id, pos)
+                    val id = db.createClaim(p.uniqueId); val pos = ChunkPos(w, k)
+
+                    // Load defaults from config
+                    val defBreak = plugin.config.getBoolean("default-rules.allowBlockBreak", false)
+                    val defInteract = plugin.config.getBoolean("default-rules.allowBlockInteract", false)
+                    val defEntity = plugin.config.getString("default-rules.allowEntityInteract", "false")!!
+
+                    val claim = Claim(id, p.uniqueId, mutableSetOf(pos), defBreak, defInteract, defEntity)
+
+                    registry.add(claim); db.addChunk(id, pos); db.updateRules(claim)
                     blueMapService.updateClaim(claim)
                     msg.send(p, Component.text("Successfully claimed this chunk and created a new claim."))
                     finishAction(p, claim.owner)
