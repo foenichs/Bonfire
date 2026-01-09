@@ -2,10 +2,12 @@ package com.foenichs.bonfire.listener.protection
 
 import com.foenichs.bonfire.service.ProtectionService
 import org.bukkit.Material
+import org.bukkit.block.data.Directional
 import org.bukkit.event.EventHandler
 import org.bukkit.event.EventPriority
 import org.bukkit.event.Listener
 import org.bukkit.event.block.BlockBurnEvent
+import org.bukkit.event.block.BlockDispenseEvent
 import org.bukkit.event.block.BlockFertilizeEvent
 import org.bukkit.event.block.BlockFromToEvent
 import org.bukkit.event.block.BlockSpreadEvent
@@ -94,6 +96,25 @@ class WorldProtectionListener(
             ) {
                 iterator.remove()
             }
+        }
+    }
+
+    /**
+     * Dispensers firing items, fluids, or projectiles across borders
+     */
+    @EventHandler(priority = EventPriority.LOWEST, ignoreCancelled = true)
+    fun onDispense(event: BlockDispenseEvent) {
+        val block = event.block
+        val data = block.blockData
+
+        if (data !is Directional) return
+
+        val targetBlock = block.getRelative(data.facing)
+        val fromChunk = block.chunk
+        val toChunk = targetBlock.chunk
+
+        if (!protection.isWorldActionAllowed(fromChunk, toChunk) && !protection.checkAllowBlockBreak(toChunk)) {
+            event.isCancelled = true
         }
     }
 }
