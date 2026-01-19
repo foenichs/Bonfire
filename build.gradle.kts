@@ -2,7 +2,6 @@ plugins {
     kotlin("jvm") version "2.3.0"
     id("com.gradleup.shadow") version "8.3.0"
     id("xyz.jpenilla.run-paper") version "2.3.1"
-    id("com.github.johnrengelman.shadow") version "8.1.1"
 }
 
 group = "com.foenichs"
@@ -40,10 +39,8 @@ kotlin {
     jvmToolchain(targetJavaVersion)
 }
 
-tasks.named<com.github.jengelman.gradle.plugins.shadow.tasks.ShadowJar>("shadowJar") {
-    configurations = listOf(project.configurations.runtimeClasspath.get())
-    dependencies { exclude { it.moduleGroup != "org.bstats" } }
-    relocate("org.bstats", project.group.toString())
+tasks.shadowJar {
+    relocate("org.bstats", "com.foenichs.bonfire.lib.bstats")
 }
 
 tasks.build {

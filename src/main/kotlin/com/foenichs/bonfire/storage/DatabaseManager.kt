@@ -84,5 +84,12 @@ class DatabaseManager(dataFolder: File) {
     }
 
     fun deleteClaim(id: Int) = connection.createStatement().execute("DELETE FROM claims WHERE id = $id")
+
+    fun updateOwner(id: Int, newOwner: UUID) {
+        val ps = connection.prepareStatement("UPDATE claims SET owner_uuid = ? WHERE id = ?")
+        ps.setString(1, newOwner.toString())
+        ps.setInt(2, id)
+        ps.executeUpdate()
+    }
     fun close() = connection.close()
 }

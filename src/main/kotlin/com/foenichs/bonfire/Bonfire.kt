@@ -49,11 +49,11 @@ class Bonfire : JavaPlugin() {
         // Register Command Tree
         lifecycleManager.registerEventHandler(LifecycleEvents.COMMANDS) { event ->
             ChunkCommand(claimService, registry, limitService, messenger).register(event.registrar())
-            BonfireCommand {
+            BonfireCommand({
                 reloadConfig()
                 limitService.updateConfig(config)
                 blueMapService?.refreshAll()
-            }.register(event.registrar())
+            }, claimService).register(event.registrar())
         }
 
         // Register Event Listeners
