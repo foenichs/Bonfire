@@ -1,7 +1,7 @@
 name: Bonfire
 version: '1.4'
 main: com.foenichs.bonfire.Bonfire
-api-version: '1.21'
+api-version: '1.21.11'
 prefix: Bonfire
 authors: [ foenichs ]
 description: Easily claim chunks and manage how others can interact with them.
