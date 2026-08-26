@@ -7,13 +7,22 @@ import com.foenichs.bonfire.storage.ClaimRegistry
 import com.foenichs.bonfire.ui.Messenger
 import com.mojang.brigadier.arguments.StringArgumentType
 import io.papermc.paper.command.brigadier.Commands
+import io.papermc.paper.dialog.Dialog
+import io.papermc.paper.registry.data.dialog.ActionButton
+import io.papermc.paper.registry.data.dialog.DialogBase
+import io.papermc.paper.registry.data.dialog.action.DialogAction
+import io.papermc.paper.registry.data.dialog.body.DialogBody
+import io.papermc.paper.registry.data.dialog.type.DialogType
 import net.kyori.adventure.text.Component
+import net.kyori.adventure.text.event.ClickEvent
 import net.kyori.adventure.text.format.NamedTextColor
+import net.kyori.adventure.text.format.TextDecoration
 import org.bukkit.Bukkit
 import org.bukkit.entity.Player
 import org.bukkit.permissions.Permission
 import org.bukkit.permissions.PermissionDefault
 
+@Suppress("UnstableApiUsage")
 class ChunkCommand(
     private val service: ClaimService,
     private val registry: ClaimRegistry,
@@ -82,14 +91,21 @@ class ChunkCommand(
                                 }
                             }
                             b.buildFuture()
+                        }.executes { ctx ->
+                            val p = ctx.source.sender as? Player ?: return@executes 0
+                            if (!service.verifyPermissions(p)) { msg.sendNoAccess(p); return@executes 0 }
+
+                            val resolvedName = getResolvedName(p, StringArgumentType.getString(ctx, "target")) ?: return@executes 0
+                            showAddDialog(p, resolvedName)
+                            1
                         }.then(Commands.literal("always").executes { ctx ->
-                            service.addTrust(
-                                ctx.source.sender as Player, StringArgumentType.getString(ctx, "target"), "always"
-                            ); 1
+                            val p = ctx.source.sender as Player
+                            val resolvedName = getResolvedName(p, StringArgumentType.getString(ctx, "target")) ?: return@executes 0
+                            service.addTrust(p, resolvedName, "always"); 1
                         }).then(Commands.literal("whileOnline").executes { ctx ->
-                            service.addTrust(
-                                ctx.source.sender as Player, StringArgumentType.getString(ctx, "target"), "whileOnline"
-                            ); 1
+                            val p = ctx.source.sender as Player
+                            val resolvedName = getResolvedName(p, StringArgumentType.getString(ctx, "target")) ?: return@executes 0
+                            service.addTrust(p, resolvedName, "whileOnline"); 1
                         })
                     )
             ).then(
@@ -108,11 +124,34 @@ class ChunkCommand(
                         }
                         b.buildFuture()
                     }.executes { ctx ->
-                        service.removeTrust(ctx.source.sender as Player, StringArgumentType.getString(ctx, "target")); 1
+                        val p = ctx.source.sender as Player
+                        val resolvedName = getResolvedName(p, StringArgumentType.getString(ctx, "target")) ?: return@executes 0
+                        service.removeTrust(p, resolvedName); 1
                     })
             )
 
         registrar.register(node.build(), "The core command of Bonfire.")
+    }
+
+    private fun showAddDialog(p: Player, target: String) {
+        val dialog = Dialog.create { b ->
+            b.empty().base(
+                DialogBase.builder(Component.text("Add Player", NamedTextColor.WHITE))
+                    .body(listOf(DialogBody.plainMessage(
+                        Component.text()
+                            .append(Component.text("When should "))
+                            .append(msg.head(target)).append(Component.space()).append(Component.text(target, NamedTextColor.WHITE, TextDecoration.BOLD))
+                            .append(Component.text(" not be affected by your claim's rules?")).build()
+                    )))
+                    .build()
+            ).type(
+                DialogType.multiAction(listOf(
+                    ActionButton.create(Component.text("Always"), null, 60, DialogAction.staticAction(ClickEvent.runCommand("/chunk addplayer $target always"))),
+                    ActionButton.create(Component.text("While I'm online"), null, 100, DialogAction.staticAction(ClickEvent.runCommand("/chunk addplayer $target whileOnline")))
+                )).build()
+            )
+        }
+        p.showDialog(dialog)
     }
 
     /**
@@ -128,4 +167,17 @@ class ChunkCommand(
             })
 
     private fun isOwner(p: Player?) = p?.let { registry.getAt(it.location.chunk)?.owner == it.uniqueId } ?: false
+
+    /**
+     * Validation for profile names
+     */
+    private fun getResolvedName(p: Player, input: String): String? {
+        val offline = Bukkit.getOfflinePlayers().find { it.name?.equals(input, true) == true }
+        if (offline == null || (!offline.hasPlayedBefore() && !offline.isOnline)) {
+            msg.send(p, Component.text().append(Component.text("This player wasn't found. "))
+                .append(Component.text("They have to join once before they can be added to claims.", NamedTextColor.GRAY)).build())
+            return null
+        }
+        return offline.name
+    }
 }
