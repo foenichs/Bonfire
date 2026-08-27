@@ -6,4 +6,4 @@ prefix: Bonfire
 authors: [ foenichs ]
 description: Easily claim chunks and manage how others can interact with them.
 website: foenichs.com
-softdepend: [BlueMap]
+softdepend: [BlueMap, squaremap]

@@ -55,18 +55,27 @@ class Bonfire : JavaPlugin() {
         visualService = VisualService(this, registry, protectionService, limitService)
         val migrationService = MigrationService(this, db, registry, protectionService)
 
-        // Initialize BlueMap Service (optional)
+        // Initialize map integrations (optional)
         val blueMapService = if (Bukkit.getPluginManager().isPluginEnabled("BlueMap")) {
             BlueMapService(this, registry)
         } else {
             null
         }
+        val squaremapService = if (Bukkit.getPluginManager().isPluginEnabled("squaremap")) {
+            SquaremapService(this, registry).also { it.refreshAll() }
+        } else {
+            null
+        }
+        val mapServices: List<ClaimMapService> = listOfNotNull(
+            blueMapService?.let(::BlueMapClaimMapService),
+            squaremapService
+        )
 
         // Initialize Listener first (ClaimService needs it for cache updates)
         val playerListener = PlayerListener(this, registry, messenger, visualService)
 
         // Initialize Logic Service
-        val claimService = ClaimService(registry, db, messenger, limitService, visualService, playerListener, blueMapService, migrationService, this)
+        val claimService = ClaimService(registry, db, messenger, limitService, visualService, playerListener, mapServices, migrationService, this)
 
         // Register Command Tree
         lifecycleManager.registerEventHandler(LifecycleEvents.COMMANDS) { event ->
@@ -74,7 +83,7 @@ class Bonfire : JavaPlugin() {
             BonfireCommand({
                 reloadConfig()
                 limitService.updateConfig(config)
-                blueMapService?.refreshAll()
+                mapServices.forEach { it.refreshAll() }
             }, claimService).register(event.registrar())
         }
 

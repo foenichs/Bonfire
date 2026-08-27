@@ -21,6 +21,9 @@ dependencies {
 
     compileOnly("de.bluecolored:bluemap-api:2.7.8")
     compileOnly("com.flowpowered:flow-math:1.0.3")
+    compileOnly("xyz.jpenilla:squaremap-api:1.3.15") {
+        exclude(group = "net.kyori")
+    }
 
     implementation("org.bstats:bstats-bukkit:3.2.1")
 }
