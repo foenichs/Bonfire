@@ -22,7 +22,7 @@ class ClaimService(
     private val limits: LimitService,
     private val visualService: VisualService,
     private val playerListener: PlayerListener,
-    private val blueMapService: BlueMapService?,
+    private val mapServices: List<ClaimMapService>,
     private val migrationService: MigrationService,
     private val plugin: Bonfire
 ) {
@@ -52,7 +52,7 @@ class ClaimService(
             adj.size == 1 -> {
                 val c = adj.first(); val pos = ChunkPos(w, k); c.chunks.add(pos); db.addChunk(c.id!!, pos)
                 migrationService.processChunk(ch)
-                blueMapService?.updateClaim(c)
+                updateClaimMarkers(c)
                 msg.send(p, Component.text("Successfully claimed this chunk and added it to your claim."))
                 finishAction(p, c.owner)
             }
@@ -77,7 +77,7 @@ class ClaimService(
                     val claim = Claim(id, p.uniqueId, mutableSetOf(pos), defBreak, defInteract, defEntity)
                     registry.add(claim); db.addChunk(id, pos); db.updateRules(claim)
                     migrationService.processChunk(ch)
-                    blueMapService?.updateClaim(claim)
+                    updateClaimMarkers(claim)
                     msg.send(p, Component.text("Successfully claimed this chunk and created a new claim."))
                     finishAction(p, claim.owner)
                 }
@@ -113,7 +113,7 @@ class ClaimService(
         val oldOwnerId = claim.owner
         claim.owner = offline.uniqueId
         db.updateOwner(claim.id!!, offline.uniqueId)
-        blueMapService?.updateClaim(claim)
+        updateClaimMarkers(claim)
 
         msg.send(p, Component.text("Successfully transferred the ownership of this claim to ${offline.name}."))
         finishActionForClaim(claim)
@@ -243,9 +243,9 @@ class ClaimService(
 
             db.deleteClaim(id)
             main.chunks.addAll(d.chunks); main.trustedAlways.addAll(d.trustedAlways); main.trustedOnline.addAll(d.trustedOnline)
-            registry.remove(d); blueMapService?.removeClaim(id, wid)
+            registry.remove(d); removeClaimMarkers(id, wid)
         }
-        blueMapService?.updateClaim(main)
+        updateClaimMarkers(main)
         msg.send(p, Component.text("Successfully merged your claims.")); finishAction(p, main.owner)
         finishActionForClaim(main)
     }
@@ -254,14 +254,22 @@ class ClaimService(
         val wid = c.chunks.first().worldUuid; val id = c.id!!
         db.deleteClaim(id); registry.remove(c)
         c.chunks.forEach { db.removeFromQueue(it.worldUuid, it.chunkKey) }
-        blueMapService?.removeClaim(id, wid)
+        removeClaimMarkers(id, wid)
         refreshPlayersAfterRemoval(c)
     }
 
     private fun handleChunkUnclaim(c: Claim, pos: ChunkPos) {
         c.chunks.remove(pos); db.removeChunk(c.id!!, pos)
         db.removeFromQueue(pos.worldUuid, pos.chunkKey)
-        blueMapService?.updateClaim(c)
+        updateClaimMarkers(c)
+    }
+
+    private fun updateClaimMarkers(claim: Claim) {
+        mapServices.forEach { it.updateClaim(claim) }
+    }
+
+    private fun removeClaimMarkers(id: Int, worldId: UUID) {
+        mapServices.forEach { it.removeClaim(id, worldId) }
     }
 
     private fun refreshPlayersAfterRemoval(c: Claim) {

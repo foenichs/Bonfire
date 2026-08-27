@@ -35,3 +35,23 @@ bluemap:
   accent-color: 255, 221, 161
   # If the camera is further to this marker than this distance, it will be hidden
   view-distance: 1000
+
+# Configs for squaremap claim markers, if squaremap is installed
+squaremap:
+  # If set to false, the Bonfire Claims layer won't be shown
+  enable-markers: true
+  # Layer name displayed in squaremap's layer control
+  layer-label: Bonfire Claims
+  # $name gets replaced with the name of the claim owner
+  label: Claimed by $name
+  # Whether the layer should be hidden when the map is first opened
+  default-hidden: false
+  # RGB colors and opacity for claim borders and fill
+  stroke-color: 255, 221, 161
+  stroke-opacity: 0.8
+  stroke-weight: 2
+  fill-color: 255, 221, 161
+  fill-opacity: 0.15
+  # Ordering relative to other squaremap layers
+  layer-priority: 50
+  z-index: 50
