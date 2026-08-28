@@ -1,6 +1,7 @@
 package com.foenichs.bonfire.listener
 
 import com.foenichs.bonfire.Bonfire
+import com.foenichs.bonfire.model.ChunkPos
 import com.foenichs.bonfire.service.VisualService
 import com.foenichs.bonfire.storage.ClaimRegistry
 import com.foenichs.bonfire.ui.Messenger
@@ -28,7 +29,9 @@ class PlayerListener(
      */
     @EventHandler
     fun onMove(event: PlayerMoveEvent) {
-        handlePlayerUpdate(event.player, event.to, event.from.chunk != event.to.chunk)
+        val crossedChunk = event.from.chunk != event.to.chunk
+        val crossedLayer = ChunkPos.layerFor(event.from) != ChunkPos.layerFor(event.to)
+        handlePlayerUpdate(event.player, event.to, crossedChunk || crossedLayer)
     }
 
     /**
@@ -71,8 +74,7 @@ class PlayerListener(
         visualService.updateValues(p)
 
         if (chunkChanged) {
-            val chunk = loc.chunk
-            val currOwner = registry.getAt(chunk)?.owner
+            val currOwner = registry.getAt(loc)?.owner
             val lastOwner = lastOwners[p.uniqueId]
             val hasCache = lastOwners.containsKey(p.uniqueId)
 
@@ -92,7 +94,7 @@ class PlayerListener(
      * Updates the cached owner for a specific player manually
      */
     fun updateCache(p: Player) {
-        lastOwners[p.uniqueId] = registry.getAt(p.location.chunk)?.owner
+        lastOwners[p.uniqueId] = registry.getAt(p.location)?.owner
     }
 
     /**
@@ -101,7 +103,7 @@ class PlayerListener(
     private fun refreshAffectedPlayers(ownerId: UUID) {
         Bukkit.getScheduler().runTask(plugin, Runnable {
             Bukkit.getOnlinePlayers().forEach { onlinePlayer ->
-                val claim = registry.getAt(onlinePlayer.location.chunk)
+                val claim = registry.getAt(onlinePlayer.location)
                 if (claim?.owner == ownerId) {
                     visualService.updateValues(onlinePlayer)
                 }

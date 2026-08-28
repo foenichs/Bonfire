@@ -2,8 +2,10 @@ package com.foenichs.bonfire.service
 
 import com.foenichs.bonfire.Bonfire
 import com.foenichs.bonfire.listener.PlayerListener
+import com.foenichs.bonfire.model.ChunkLayer
 import com.foenichs.bonfire.model.ChunkPos
 import com.foenichs.bonfire.model.Claim
+import com.foenichs.bonfire.model.opposite
 import com.foenichs.bonfire.storage.ClaimRegistry
 import com.foenichs.bonfire.storage.DatabaseManager
 import com.foenichs.bonfire.ui.Messenger
@@ -12,6 +14,7 @@ import net.kyori.adventure.text.format.NamedTextColor
 import net.kyori.adventure.text.format.TextDecoration
 import org.bukkit.Bukkit
 import org.bukkit.Chunk
+import org.bukkit.World
 import org.bukkit.entity.Player
 import java.util.*
 
@@ -26,12 +29,12 @@ class ClaimService(
     private val migrationService: MigrationService,
     private val plugin: Bonfire
 ) {
-    data class PendingMerge(val worldUuid: UUID, val chunkKey: Long, val claims: List<Claim>, val time: Long)
+    data class PendingMerge(val worldUuid: UUID, val chunkKey: Long, val layer: ChunkLayer, val claims: List<Claim>, val time: Long)
     private val pending = mutableMapOf<UUID, PendingMerge>()
 
     fun verifyPermissions(p: Player): Boolean {
         visualService.updateValues(p)
-        val claim = registry.getAt(p.location.chunk)
+        val claim = registry.getAt(p.location)
         return claim != null && claim.owner == p.uniqueId
     }
 
@@ -39,28 +42,30 @@ class ClaimService(
      * Claiming a chunk and either adding it to a claim or creating a new claim
      */
     fun tryClaim(p: Player) {
-        val ch = p.location.chunk; val w = ch.world.uid; val k = ch.chunkKey; val limits = limits.getLimits(p)
-        if (registry.getAt(w, k) != null) return
+        val loc = p.location; val ch = loc.chunk; val w = ch.world.uid; val k = ch.chunkKey; val layer = ChunkPos.layerFor(loc)
+        val chunkWord = if (ch.world.environment == World.Environment.NETHER) { if (layer == ChunkLayer.ROOF) "roof chunk" else "ground chunk" } else "chunk"
+        val limits = limits.getLimits(p)
+        if (registry.getAt(w, k, layer) != null) return
         if (registry.getOwnedChunks(p.uniqueId) >= limits.maxChunks) {
             msg.send(p, Component.text().append(Component.text("You've reached your chunk limit. "))
                 .append(Component.text("Keep playing to earn more chunks and claims.", NamedTextColor.GRAY)).build())
             return
         }
 
-        val adj = findAdj(p, w, ch.x, ch.z)
+        val adj = findAdj(p, w, ch.x, ch.z, layer)
         when {
             adj.size == 1 -> {
-                val c = adj.first(); val pos = ChunkPos(w, k); c.chunks.add(pos); db.addChunk(c.id!!, pos)
+                val c = adj.first(); val pos = ChunkPos(w, k, layer); c.chunks.add(pos); db.addChunk(c.id!!, pos)
                 migrationService.processChunk(ch)
                 updateClaimMarkers(c)
-                msg.send(p, Component.text("Successfully claimed this chunk and added it to your claim."))
+                msg.send(p, Component.text("Successfully claimed this $chunkWord and added it to your claim."))
                 finishAction(p, c.owner)
             }
             adj.size > 1 -> {
                 val now = System.currentTimeMillis(); val ex = pending[p.uniqueId]
-                if (ex != null && ex.chunkKey == k && (now - ex.time) <= 15000) { executeMerge(p, ex); pending.remove(p.uniqueId) }
+                if (ex != null && ex.chunkKey == k && ex.layer == layer && (now - ex.time) <= 15000) { executeMerge(p, ex); pending.remove(p.uniqueId) }
                 else {
-                    pending[p.uniqueId] = PendingMerge(w, k, adj.sortedBy { it.id }, now)
+                    pending[p.uniqueId] = PendingMerge(w, k, layer, adj.sortedBy { it.id }, now)
                     msg.send(p, Component.text().append(Component.text("Claiming this chunk would merge two claims, overriding the settings of the claim that was created later.", NamedTextColor.GRAY)).append(Component.text(" If you want to merge both claims, run that command again.", NamedTextColor.WHITE)).build())
                 }
             }
@@ -69,7 +74,7 @@ class ClaimService(
                     msg.send(p, Component.text().append(Component.text("You've reached your claim limit. "))
                         .append(Component.text("Keep playing to earn more chunks and claims.", NamedTextColor.GRAY)).build())
                 } else {
-                    val id = db.createClaim(p.uniqueId); val pos = ChunkPos(w, k)
+                    val id = db.createClaim(p.uniqueId); val pos = ChunkPos(w, k, layer)
                     val defBreak = plugin.config.getBoolean("default-rules.allowBlockBreak", false)
                     val defInteract = plugin.config.getBoolean("default-rules.allowBlockInteract", false)
                     val defEntity = plugin.config.getString("default-rules.allowEntityInteract", "false")!!
@@ -78,7 +83,7 @@ class ClaimService(
                     registry.add(claim); db.addChunk(id, pos); db.updateRules(claim)
                     migrationService.processChunk(ch)
                     updateClaimMarkers(claim)
-                    msg.send(p, Component.text("Successfully claimed this chunk and created a new claim."))
+                    msg.send(p, Component.text("Successfully claimed this $chunkWord and created a new claim."))
                     finishAction(p, claim.owner)
                 }
             }
@@ -90,7 +95,7 @@ class ClaimService(
      */
     fun tryUnclaim(p: Player) {
         if (!verifyPermissions(p)) { msg.sendNoAccess(p); return }
-        val ch = p.location.chunk; val pos = ChunkPos(ch.world.uid, ch.chunkKey); val c = registry.getAt(pos.worldUuid, pos.chunkKey) ?: return
+        val loc = p.location; val pos = ChunkPos(loc.world.uid, loc.chunk.chunkKey, ChunkPos.layerFor(loc)); val c = registry.getAt(pos.worldUuid, pos.chunkKey, pos.layer) ?: return
         if (c.chunks.size <= 1) {
             handleClaimRemoval(c)
             msg.send(p, Component.text("Successfully unclaimed this chunk and deleted the claim."))
@@ -107,7 +112,7 @@ class ClaimService(
      * Set a new owner for a claim (OP-only)
      */
     fun adminSetOwner(p: Player, newOwnerName: String) {
-        val claim = registry.getAt(p.location.chunk) ?: run { msg.send(p, Component.text("Nothing changed, you aren't inside a claimed chunk.")); return }
+        val claim = registry.getAt(p.location) ?: run { msg.send(p, Component.text("Nothing changed, you aren't inside a claimed chunk.")); return }
         val offline = Bukkit.getOfflinePlayers().find { it.name?.equals(newOwnerName, true) == true } ?: run { msg.send(p, Component.text("Nothing changed, that player wasn't found on the server.")); return }
 
         val oldOwnerId = claim.owner
@@ -124,7 +129,7 @@ class ClaimService(
      * Remove a claim (OP-only)
      */
     fun adminRemoveClaim(p: Player) {
-        val claim = registry.getAt(p.location.chunk) ?: run { msg.send(p, Component.text("Nothing changed, you aren't inside a claim.")); return }
+        val claim = registry.getAt(p.location) ?: run { msg.send(p, Component.text("Nothing changed, you aren't inside a claim.")); return }
         handleClaimRemoval(claim)
         msg.send(p, Component.text("Successfully removed the claim and unclaimed all chunks."))
     }
@@ -133,7 +138,7 @@ class ClaimService(
      * Unclaim a chunk (OP-only)
      */
     fun adminUnclaimChunk(p: Player) {
-        val chunk = p.location.chunk; val pos = ChunkPos(chunk.world.uid, chunk.chunkKey); val claim = registry.getAt(chunk) ?: run { msg.send(p, Component.text("Nothing changed, you are not inside a claim.")); return }
+        val loc = p.location; val pos = ChunkPos(loc.world.uid, loc.chunk.chunkKey, ChunkPos.layerFor(loc)); val claim = registry.getAt(loc) ?: run { msg.send(p, Component.text("Nothing changed, you are not inside a claim.")); return }
 
         if (claim.chunks.size <= 1) {
             handleClaimRemoval(claim)
@@ -165,7 +170,7 @@ class ClaimService(
      */
     fun setRule(p: Player, r: String, v: String) {
         if (!verifyPermissions(p)) { msg.sendNoAccess(p); return }
-        val c = registry.getAt(p.location.chunk) ?: return
+        val c = registry.getAt(p.location) ?: return
         if (r == "allowEntityInteract" && v != "true" && v != "false" && v != "onlyMounts") return
         when(r) { "allowBlockBreak" -> c.allowBlockBreak = v.toBoolean(); "allowBlockInteract" -> c.allowBlockInteract = v.toBoolean(); "allowEntityInteract" -> c.allowEntityInteract = v }
         db.updateRules(c)
@@ -185,7 +190,7 @@ class ClaimService(
      */
     fun addTrust(p: Player, n: String, t: String) {
         if (!verifyPermissions(p)) { msg.sendNoAccess(p); return }
-        val c = registry.getAt(p.location.chunk) ?: return
+        val c = registry.getAt(p.location) ?: return
         val off = Bukkit.getOfflinePlayers().find { it.name?.equals(n, true) == true }
         if (off == null || (!off.hasPlayedBefore() && !off.isOnline)) {
             msg.send(p, Component.text().append(Component.text("This player wasn't found. ")).append(Component.text("They have to join once before they can be added to claims.", NamedTextColor.GRAY)).build())
@@ -217,7 +222,7 @@ class ClaimService(
      */
     fun removeTrust(p: Player, n: String) {
         if (!verifyPermissions(p)) { msg.sendNoAccess(p); return }
-        val c = registry.getAt(p.location.chunk) ?: return
+        val c = registry.getAt(p.location) ?: return
         val id = Bukkit.getOfflinePlayers().find { it.name?.equals(n, true) == true }?.uniqueId ?: return
         if (c.trustedAlways.remove(id) || c.trustedOnline.remove(id)) {
             db.removeTrust(c.id!!, id)
@@ -231,7 +236,7 @@ class ClaimService(
      * Merges two claims and creates aliases
      */
     private fun executeMerge(p: Player, m: PendingMerge) {
-        val main = m.claims.first(); val pos = ChunkPos(m.worldUuid, m.chunkKey)
+        val main = m.claims.first(); val pos = ChunkPos(m.worldUuid, m.chunkKey, m.layer)
         db.addChunk(main.id!!, pos); main.chunks.add(pos)
         migrationService.processChunk(p.location.chunk)
 
@@ -274,7 +279,7 @@ class ClaimService(
 
     private fun refreshPlayersAfterRemoval(c: Claim) {
         Bukkit.getOnlinePlayers().forEach { online ->
-            if (c.chunks.contains(ChunkPos(online.world.uid, online.location.chunk.chunkKey))) {
+            if (c.chunks.contains(ChunkPos.of(online.location))) {
                 playerListener.updateCache(online); visualService.updateValues(online)
                 msg.unclaimedBar(online)
             }
@@ -282,9 +287,9 @@ class ClaimService(
     }
 
     private fun finishAction(p: Player, ownerId: UUID?) {
-        val chunk = p.location.chunk
+        val pos = ChunkPos.of(p.location)
         Bukkit.getOnlinePlayers().forEach { online ->
-            if (online.location.chunk == chunk) {
+            if (ChunkPos.of(online.location) == pos) {
                 playerListener.updateCache(online); visualService.updateValues(online)
                 if (ownerId != null) msg.actionBar(online, Bukkit.getOfflinePlayer(ownerId).name ?: "Unknown") else msg.unclaimedBar(online)
             }
@@ -293,7 +298,7 @@ class ClaimService(
 
     private fun finishActionForClaim(c: Claim) {
         Bukkit.getOnlinePlayers().forEach { online ->
-            if (registry.getAt(online.location.chunk)?.id == c.id) {
+            if (registry.getAt(online.location)?.id == c.id) {
                 playerListener.updateCache(online); visualService.updateValues(online)
                 msg.actionBar(online, Bukkit.getOfflinePlayer(c.owner).name ?: "Unknown")
             }
@@ -305,12 +310,28 @@ class ClaimService(
         val start = rem.first(); val vis = mutableSetOf<ChunkPos>(); val q: Queue<ChunkPos> = LinkedList(); q.add(start); vis.add(start)
         while (q.isNotEmpty()) {
             val curr = q.poll(); val x = curr.chunkKey.toInt(); val z = (curr.chunkKey shr 32).toInt()
-            listOf(Chunk.getChunkKey(x+1,z), Chunk.getChunkKey(x-1,z), Chunk.getChunkKey(x,z+1), Chunk.getChunkKey(x,z-1)).forEach { k ->
-                val p = ChunkPos(curr.worldUuid, k); if (rem.contains(p) && vis.add(p)) q.add(p)
-            }
+            val neighbors = listOf(
+                ChunkPos(curr.worldUuid, Chunk.getChunkKey(x+1,z), curr.layer),
+                ChunkPos(curr.worldUuid, Chunk.getChunkKey(x-1,z), curr.layer),
+                ChunkPos(curr.worldUuid, Chunk.getChunkKey(x,z+1), curr.layer),
+                ChunkPos(curr.worldUuid, Chunk.getChunkKey(x,z-1), curr.layer),
+                ChunkPos(curr.worldUuid, curr.chunkKey, curr.layer.opposite())
+            )
+            neighbors.forEach { p -> if (rem.contains(p) && vis.add(p)) q.add(p) }
         }
         return vis.size == rem.size
     }
 
-    private fun findAdj(p: Player, w: UUID, x: Int, z: Int) = registry.getAll().filter { c -> c.owner == p.uniqueId && c.chunks.any { cp -> cp.worldUuid == w && listOf(Chunk.getChunkKey(x+1,z), Chunk.getChunkKey(x-1,z), Chunk.getChunkKey(x,z+1), Chunk.getChunkKey(x,z-1)).contains(cp.chunkKey) } }
+    private fun findAdj(p: Player, w: UUID, x: Int, z: Int, layer: ChunkLayer): List<Claim> {
+        val horizontalKeys = listOf(Chunk.getChunkKey(x+1,z), Chunk.getChunkKey(x-1,z), Chunk.getChunkKey(x,z+1), Chunk.getChunkKey(x,z-1))
+        val currentKey = Chunk.getChunkKey(x, z)
+        return registry.getAll().filter { c ->
+            c.owner == p.uniqueId && c.chunks.any { cp ->
+                cp.worldUuid == w && (
+                        (cp.layer == layer && horizontalKeys.contains(cp.chunkKey)) ||
+                                (cp.layer == layer.opposite() && cp.chunkKey == currentKey)
+                        )
+            }
+        }
+    }
 }

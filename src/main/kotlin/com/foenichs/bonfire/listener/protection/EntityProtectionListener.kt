@@ -6,6 +6,7 @@ import com.foenichs.bonfire.service.ProtectionService
 import com.foenichs.bonfire.service.VisualService
 import com.foenichs.bonfire.storage.ClaimRegistry
 import org.bukkit.Bukkit
+import org.bukkit.Location
 import org.bukkit.Material
 import org.bukkit.entity.*
 import org.bukkit.event.Cancellable
@@ -39,12 +40,12 @@ class EntityProtectionListener(
     @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
     fun onPlayerMove(event: PlayerMoveEvent) {
         val player = event.player
-        val chunk = player.location.chunk
-        val claim = registry.getAt(chunk) ?: run {
+        val location = player.location
+        val claim = registry.getAt(location) ?: run {
             visualService.clearEntityException(player)
             return
         }
-        if (protection.canBypass(player, chunk)) {
+        if (protection.canBypass(player, location)) {
             visualService.clearEntityException(player)
             return
         }
@@ -80,9 +81,9 @@ class EntityProtectionListener(
         val target = event.target as? Player ?: return
 
         // Authorized players can be targeted normally
-        if (protection.canBypass(target, target.location.chunk)) return
+        if (protection.canBypass(target, target.location)) return
 
-        val claim = registry.getAt(target.location.chunk) ?: return
+        val claim = registry.getAt(target.location) ?: return
         if (claim.allowEntityInteract == "false" || claim.allowEntityInteract == "onlyMounts") {
             event.target = null
             event.isCancelled = true
@@ -97,7 +98,7 @@ class EntityProtectionListener(
         val remover = event.remover as? Player ?: return
 
         // Authorized players can break these normally
-        if (protection.canBypass(remover, event.entity.location.chunk)) return
+        if (protection.canBypass(remover, event.entity.location)) return
 
         event.isCancelled = true
     }
@@ -108,8 +109,8 @@ class EntityProtectionListener(
     @EventHandler(priority = EventPriority.LOWEST, ignoreCancelled = true)
     fun onEntityDamage(event: EntityDamageByEntityEvent) {
         val victim = event.entity
-        val victimChunk = victim.location.chunk
-        val claim = registry.getAt(victimChunk) ?: return
+        val victimLocation = victim.location
+        val claim = registry.getAt(victimLocation) ?: return
 
         // Resolve the responsible player (damager)
         val damager = when (val attacker = event.damager) {
@@ -121,10 +122,10 @@ class EntityProtectionListener(
         }
 
         // Authorized damagers can always deal damage
-        if (damager != null && protection.canBypass(damager, victimChunk)) return
+        if (damager != null && protection.canBypass(damager, victimLocation)) return
 
         // Mobs and world damage can only affect authorized players
-        if (damager == null && victim is Player && protection.canBypass(victim, victimChunk)) return
+        if (damager == null && victim is Player && protection.canBypass(victim, victimLocation)) return
 
         // Enforcement for unauthorized actors
         if (claim.allowEntityInteract == "false" || claim.allowEntityInteract == "onlyMounts") {
@@ -148,8 +149,8 @@ class EntityProtectionListener(
     @EventHandler(priority = EventPriority.LOWEST, ignoreCancelled = true)
     fun onEntityKnockback(event: EntityKnockbackByEntityEvent) {
         val victim = event.entity
-        val victimChunk = victim.location.chunk
-        val claim = registry.getAt(victimChunk) ?: return
+        val victimLocation = victim.location
+        val claim = registry.getAt(victimLocation) ?: return
 
         // Responsible player
         val damager = when (val source = event.hitBy) {
@@ -159,10 +160,10 @@ class EntityProtectionListener(
         }
 
         // Authorized damagers can deal knockback normally
-        if (damager != null && protection.canBypass(damager, victimChunk)) return
+        if (damager != null && protection.canBypass(damager, victimLocation)) return
 
         // Only authorized players can be knocked back
-        if (damager == null && victim is Player && protection.canBypass(victim, victimChunk)) return
+        if (damager == null && victim is Player && protection.canBypass(victim, victimLocation)) return
 
         if (claim.allowEntityInteract == "false" || claim.allowEntityInteract == "onlyMounts") {
             // Allow if the damager owns the victim
@@ -188,9 +189,9 @@ class EntityProtectionListener(
     private fun processInteract(player: Player, entity: Entity, event: Cancellable) {
         // Authorized players and pet owners are not restricted
         if (protection.ownsEntity(player, entity)) return
-        if (protection.canBypass(player, entity.location.chunk)) return
+        if (protection.canBypass(player, entity.location)) return
 
-        val claim = registry.getAt(entity.location.chunk) ?: return
+        val claim = registry.getAt(entity.location) ?: return
         if (claim.allowEntityInteract == "false") {
             event.isCancelled = true
         } else if (claim.allowEntityInteract == "onlyMounts") {
@@ -206,11 +207,11 @@ class EntityProtectionListener(
     @EventHandler(priority = EventPriority.LOWEST, ignoreCancelled = true)
     fun onEntityPlace(event: EntityPlaceEvent) {
         val player = event.player ?: return
-        val chunk = event.entity.location.chunk
+        val location = event.entity.location
 
-        if (protection.canBypass(player, chunk)) return
+        if (protection.canBypass(player, location)) return
 
-        val claim = registry.getAt(chunk) ?: return
+        val claim = registry.getAt(location) ?: return
         if (claim.allowEntityInteract == "false" || claim.allowEntityInteract == "onlyMounts") {
             event.isCancelled = true
         }
@@ -222,7 +223,7 @@ class EntityProtectionListener(
     @EventHandler(priority = EventPriority.LOWEST, ignoreCancelled = true)
     fun onVehicleDamage(event: VehicleDamageEvent) {
         val attacker = event.attacker ?: return
-        if (isVehicleActionBlocked(attacker, event.vehicle.location.chunk)) {
+        if (isVehicleActionBlocked(attacker, event.vehicle.location)) {
             event.isCancelled = true
         }
     }
@@ -233,7 +234,7 @@ class EntityProtectionListener(
     @EventHandler(priority = EventPriority.LOWEST, ignoreCancelled = true)
     fun onVehicleDestroy(event: VehicleDestroyEvent) {
         val attacker = event.attacker ?: return
-        if (isVehicleActionBlocked(attacker, event.vehicle.location.chunk)) {
+        if (isVehicleActionBlocked(attacker, event.vehicle.location)) {
             event.isCancelled = true
         }
     }
@@ -241,14 +242,14 @@ class EntityProtectionListener(
     /**
      * Helper logic for vehicle protection
      */
-    private fun isVehicleActionBlocked(attacker: Entity, chunk: org.bukkit.Chunk): Boolean {
+    private fun isVehicleActionBlocked(attacker: Entity, location: Location): Boolean {
         val player = when (attacker) {
             is Player -> attacker
             is Projectile -> attacker.shooter as? Player
             else -> null
         }
-        if (player != null && protection.canBypass(player, chunk)) return false
-        val claim = registry.getAt(chunk) ?: return false
+        if (player != null && protection.canBypass(player, location)) return false
+        val claim = registry.getAt(location) ?: return false
         return claim.allowEntityInteract == "false" || claim.allowEntityInteract == "onlyMounts"
     }
 
@@ -259,13 +260,13 @@ class EntityProtectionListener(
     fun onVehicleExit(event: VehicleExitEvent) {
         val vehicle = event.vehicle
         val player = event.exited as? Player ?: return
-        val chunk = vehicle.location.chunk
-        val claim = registry.getAt(chunk) ?: return
+        val location = vehicle.location
+        val claim = registry.getAt(location) ?: return
 
-        if (protection.canBypass(player, chunk)) return
+        if (protection.canBypass(player, location)) return
 
         if (claim.allowEntityInteract != "true") {
-            if (!protection.isOrigin(vehicle, chunk)) {
+            if (!protection.isOrigin(vehicle, location)) {
                 val material = when (vehicle) {
                     is Boat -> vehicle.boatMaterial
                     is Minecart -> Material.MINECART
@@ -289,14 +290,14 @@ class EntityProtectionListener(
     @EventHandler(priority = EventPriority.LOWEST, ignoreCancelled = true)
     fun onPlayerEggThrow(event: PlayerEggThrowEvent) {
         val player = event.player
-        val chunk = event.egg.location.chunk
-        val claim = registry.getAt(chunk) ?: return
+        val location = event.egg.location
+        val claim = registry.getAt(location) ?: return
 
         if (
             claim.allowEntityInteract == "false" ||
             claim.allowEntityInteract == "onlyMounts"
         ) {
-            if (!protection.canBypass(player, chunk)) {
+            if (!protection.canBypass(player, location)) {
                 event.isHatching = false
                 event.numHatches = 0
             }

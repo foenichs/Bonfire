@@ -1,5 +1,6 @@
 package com.foenichs.bonfire.storage
 
+import com.foenichs.bonfire.model.ChunkLayer
 import com.foenichs.bonfire.model.ChunkPos
 import com.foenichs.bonfire.model.Claim
 import java.io.File
@@ -15,10 +16,16 @@ class DatabaseManager(dataFolder: File) {
         val s = connection.createStatement()
         s.execute("CREATE TABLE IF NOT EXISTS bonfire_metadata (meta_key TEXT PRIMARY KEY, meta_value TEXT)")
         s.execute("CREATE TABLE IF NOT EXISTS claims (id INTEGER PRIMARY KEY AUTOINCREMENT, owner_uuid TEXT NOT NULL, allow_block_break BOOLEAN DEFAULT 0, allow_block_interact BOOLEAN DEFAULT 0, allow_entity_interact TEXT DEFAULT 'false')")
-        s.execute("CREATE TABLE IF NOT EXISTS claim_chunks (claim_id INTEGER, world_uuid TEXT NOT NULL, chunk_key INTEGER NOT NULL, FOREIGN KEY(claim_id) REFERENCES claims(id) ON DELETE CASCADE)")
+        s.execute("CREATE TABLE IF NOT EXISTS claim_chunks (claim_id INTEGER, world_uuid TEXT NOT NULL, chunk_key INTEGER NOT NULL, layer TEXT NOT NULL DEFAULT 'GROUND', FOREIGN KEY(claim_id) REFERENCES claims(id) ON DELETE CASCADE)")
         s.execute("CREATE TABLE IF NOT EXISTS trusted_players (claim_id INTEGER, player_uuid TEXT NOT NULL, trust_type TEXT NOT NULL, FOREIGN KEY(claim_id) REFERENCES claims(id) ON DELETE CASCADE)")
         s.execute("CREATE TABLE IF NOT EXISTS claim_aliases (claim_id INTEGER, legacy_id INTEGER, FOREIGN KEY(claim_id) REFERENCES claims(id) ON DELETE CASCADE)")
         s.execute("CREATE TABLE IF NOT EXISTS migration_queue (world_uuid TEXT NOT NULL, chunk_key INTEGER NOT NULL)")
+
+        // Migrate table when updating to 1.6
+        val hasLayerColumn = connection.metaData.getColumns(null, null, "claim_chunks", "layer").use { it.next() }
+        if (!hasLayerColumn) {
+            s.execute("ALTER TABLE claim_chunks ADD COLUMN layer TEXT NOT NULL DEFAULT 'GROUND'")
+        }
     }
 
     fun loadAll(): List<Claim> {
@@ -34,8 +41,8 @@ class DatabaseManager(dataFolder: File) {
                 rs.getBoolean("allow_block_interact"),
                 rs.getString("allow_entity_interact")
             )
-            val crs = connection.createStatement().executeQuery("SELECT world_uuid, chunk_key FROM claim_chunks WHERE claim_id = $id")
-            while (crs.next()) c.chunks.add(ChunkPos(UUID.fromString(crs.getString("world_uuid")), crs.getLong("chunk_key")))
+            val crs = connection.createStatement().executeQuery("SELECT world_uuid, chunk_key, layer FROM claim_chunks WHERE claim_id = $id")
+            while (crs.next()) c.chunks.add(ChunkPos(UUID.fromString(crs.getString("world_uuid")), crs.getLong("chunk_key"), ChunkLayer.valueOf(crs.getString("layer"))))
 
             val trs = connection.createStatement().executeQuery("SELECT player_uuid, trust_type FROM trusted_players WHERE claim_id = $id")
             while (trs.next()) {
@@ -72,13 +79,13 @@ class DatabaseManager(dataFolder: File) {
     }
 
     fun addChunk(id: Int, p: ChunkPos) {
-        val ps = connection.prepareStatement("INSERT INTO claim_chunks (claim_id, world_uuid, chunk_key) VALUES (?, ?, ?)")
-        ps.setInt(1, id); ps.setString(2, p.worldUuid.toString()); ps.setLong(3, p.chunkKey); ps.executeUpdate()
+        val ps = connection.prepareStatement("INSERT INTO claim_chunks (claim_id, world_uuid, chunk_key, layer) VALUES (?, ?, ?, ?)")
+        ps.setInt(1, id); ps.setString(2, p.worldUuid.toString()); ps.setLong(3, p.chunkKey); ps.setString(4, p.layer.name); ps.executeUpdate()
     }
 
     fun removeChunk(id: Int, p: ChunkPos) {
-        val ps = connection.prepareStatement("DELETE FROM claim_chunks WHERE claim_id = ? AND world_uuid = ? AND chunk_key = ?")
-        ps.setInt(1, id); ps.setString(2, p.worldUuid.toString()); ps.setLong(3, p.chunkKey); ps.executeUpdate()
+        val ps = connection.prepareStatement("DELETE FROM claim_chunks WHERE claim_id = ? AND world_uuid = ? AND chunk_key = ? AND layer = ?")
+        ps.setInt(1, id); ps.setString(2, p.worldUuid.toString()); ps.setLong(3, p.chunkKey); ps.setString(4, p.layer.name); ps.executeUpdate()
     }
 
     fun updateRules(c: Claim) {

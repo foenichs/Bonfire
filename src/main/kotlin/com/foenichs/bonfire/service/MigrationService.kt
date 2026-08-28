@@ -1,10 +1,13 @@
 package com.foenichs.bonfire.service
 
 import com.foenichs.bonfire.Bonfire
+import com.foenichs.bonfire.model.ChunkLayer
+import com.foenichs.bonfire.model.ChunkPos
 import com.foenichs.bonfire.storage.ClaimRegistry
 import com.foenichs.bonfire.storage.DatabaseManager
 import org.bukkit.Bukkit
 import org.bukkit.Chunk
+import org.bukkit.World
 import org.bukkit.entity.*
 import org.bukkit.event.EventHandler
 import org.bukkit.event.EventPriority
@@ -18,7 +21,7 @@ class MigrationService(
     private val protection: ProtectionService
 ) : Listener {
 
-    private val requiredDataVersion = "1.5.1"
+    private val requiredDataVersion = "1.6.0"
 
     init {
         val currentVersion = db.getMetadata("data_version")
@@ -28,6 +31,7 @@ class MigrationService(
             db.setMetadata("data_version", requiredDataVersion)
         } else if (currentVersion == null || isNewerThan(currentVersion)) {
             db.fillMigrationQueue()
+            mergeNetherRoofClaims()
             db.setMetadata("data_version", requiredDataVersion)
         }
 
@@ -40,13 +44,13 @@ class MigrationService(
      * Apply origin tagging to all relevant entities in a chunk and remove it from the queue
      */
     fun processChunk(chunk: Chunk) {
-        val claim = registry.getAt(chunk) ?: return
         val worldUuid = chunk.world.uid
         val chunkKey = chunk.chunkKey
 
         chunk.entities.forEach { entity ->
             if (entity is Vehicle || entity is FallingBlock || entity is Snowman || entity is ArmorStand) {
-                if (!protection.isOrigin(entity, chunk)) {
+                val claim = registry.getAt(entity.location) ?: return@forEach
+                if (!protection.isOrigin(entity, entity.location)) {
                     // Remove stale origin tags
                     val tagsToRemove = entity.scoreboardTags.filter { it.startsWith("bonfire_origin_") }
                     tagsToRemove.forEach { entity.removeScoreboardTag(it) }
@@ -68,6 +72,24 @@ class MigrationService(
                         ChunkLoadEvent.getHandlerList().unregister(this)
                     })
                 }
+            }
+        }
+    }
+
+    /**
+     * Split pre-existing claimed chunks in the nether into ground and roof chunks
+     */
+    private fun mergeNetherRoofClaims() {
+        registry.getAll().forEach { claim ->
+            val netherGroundChunks = claim.chunks.filter { pos ->
+                pos.layer == ChunkLayer.GROUND && Bukkit.getWorld(pos.worldUuid)?.environment == World.Environment.NETHER
+            }
+            if (netherGroundChunks.isEmpty()) return@forEach
+
+            netherGroundChunks.forEach { pos ->
+                val roofPos = ChunkPos(pos.worldUuid, pos.chunkKey, ChunkLayer.ROOF)
+                claim.chunks.add(roofPos)
+                db.addChunk(claim.id!!, roofPos)
             }
         }
     }

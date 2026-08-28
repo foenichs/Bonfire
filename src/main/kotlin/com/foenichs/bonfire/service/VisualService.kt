@@ -60,13 +60,13 @@ class VisualService(
      * Updates client-side attributes, gamemodes, and collision states
      */
     fun updateValues(player: Player) {
-        val chunk = player.location.chunk
-        val claim = registry.getAt(chunk)
+        val location = player.location
+        val claim = registry.getAt(location)
 
         // Manage dynamic command permissions and tree refreshes
         updatePermissions(player)
 
-        if (claim == null || protection.canBypass(player, chunk)) {
+        if (claim == null || protection.canBypass(player, location)) {
             resetPlayer(player)
             return
         }
@@ -118,8 +118,7 @@ class VisualService(
      */
     private fun updatePermissions(player: Player) {
         val attachment = attachments.getOrPut(player.uniqueId) { player.addAttachment(plugin) }
-        val chunk = player.location.chunk
-        val claim = registry.getAt(chunk)
+        val claim = registry.getAt(player.location)
 
         // Only show claim if in wilderness and under limit
         val canClaim = claim == null && registry.getOwnedChunks(player.uniqueId) < limits.getLimits(player).maxChunks

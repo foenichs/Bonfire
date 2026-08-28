@@ -24,7 +24,7 @@ class ExplosionProtectionListener(
     @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
     fun onTntSpawn(event: EntitySpawnEvent) {
         if (event.entity !is TNTPrimed) return
-        val claim = registry.getAt(event.location.chunk) ?: return
+        val claim = registry.getAt(event.location) ?: return
         event.entity.addScoreboardTag("bonfire_origin_${claim.id}")
     }
 
@@ -40,22 +40,22 @@ class ExplosionProtectionListener(
         val iterator = event.blockList().iterator()
         while (iterator.hasNext()) {
             val block = iterator.next()
-            val claim = registry.getAt(block.chunk) ?: continue
+            val claim = registry.getAt(block.location) ?: continue
 
             // TNT ignited by a trusted player bypasses rules
             if (igniter != null) {
-                if (!protection.canBypass(igniter, block.chunk)) iterator.remove()
+                if (!protection.canBypass(igniter, block.location)) iterator.remove()
                 continue
             }
 
             // TNT can destroy blocks in the claim it was created in
-            if (source is TNTPrimed && protection.isOrigin(source, block.chunk)) {
+            if (source is TNTPrimed && protection.isOrigin(source, block.location)) {
                 continue
             }
 
             // Creeper targeting a trusted player
             if (source is Creeper) {
-                if (creeperTarget != null && protection.canBypass(creeperTarget, block.chunk)) continue
+                if (creeperTarget != null && protection.canBypass(creeperTarget, block.location)) continue
                 if (!claim.allowBlockBreak) iterator.remove()
                 continue
             }
@@ -73,7 +73,7 @@ class ExplosionProtectionListener(
         val iterator = event.blockList().iterator()
         while (iterator.hasNext()) {
             val block = iterator.next()
-            val claim = registry.getAt(block.chunk) ?: continue
+            val claim = registry.getAt(block.location) ?: continue
             if (!claim.allowBlockBreak) iterator.remove()
         }
     }

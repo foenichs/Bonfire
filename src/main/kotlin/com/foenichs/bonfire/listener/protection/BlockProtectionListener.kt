@@ -2,7 +2,7 @@ package com.foenichs.bonfire.listener.protection
 
 import com.foenichs.bonfire.service.ProtectionService
 import com.foenichs.bonfire.storage.ClaimRegistry
-import org.bukkit.Chunk
+import org.bukkit.Location
 import org.bukkit.Material
 import org.bukkit.entity.Player
 import org.bukkit.event.EventHandler
@@ -22,9 +22,9 @@ class BlockProtectionListener(
     /**
      * Helper for permission checks
      */
-    private fun isActionBlocked(player: Player, chunk: Chunk): Boolean {
-        if (protection.canBypass(player, chunk)) return false
-        val claim = registry.getAt(chunk) ?: return false
+    private fun isActionBlocked(player: Player, location: Location): Boolean {
+        if (protection.canBypass(player, location)) return false
+        val claim = registry.getAt(location) ?: return false
         return !claim.allowBlockBreak
     }
 
@@ -33,7 +33,7 @@ class BlockProtectionListener(
      */
     @EventHandler(priority = EventPriority.LOWEST, ignoreCancelled = true)
     fun onBreak(event: BlockBreakEvent) {
-        if (isActionBlocked(event.player, event.block.chunk)) {
+        if (isActionBlocked(event.player, event.block.location)) {
             event.isCancelled = true
         }
     }
@@ -43,7 +43,7 @@ class BlockProtectionListener(
      */
     @EventHandler(priority = EventPriority.LOWEST, ignoreCancelled = true)
     fun onPlace(event: BlockPlaceEvent) {
-        if (isActionBlocked(event.player, event.block.chunk)) {
+        if (isActionBlocked(event.player, event.block.location)) {
             event.isCancelled = true
         }
     }
@@ -53,7 +53,7 @@ class BlockProtectionListener(
      */
     @EventHandler(priority = EventPriority.LOWEST, ignoreCancelled = true)
     fun onBucketEmpty(event: PlayerBucketEmptyEvent) {
-        if (isActionBlocked(event.player, event.block.chunk)) {
+        if (isActionBlocked(event.player, event.block.location)) {
             event.isCancelled = true
         }
     }
@@ -63,7 +63,7 @@ class BlockProtectionListener(
      */
     @EventHandler(priority = EventPriority.LOWEST, ignoreCancelled = true)
     fun onBucketFill(event: PlayerBucketFillEvent) {
-        if (isActionBlocked(event.player, event.block.chunk)) {
+        if (isActionBlocked(event.player, event.block.location)) {
             event.isCancelled = true
         }
     }
@@ -74,10 +74,10 @@ class BlockProtectionListener(
     @EventHandler(priority = EventPriority.LOWEST, ignoreCancelled = true)
     fun onProjectileHit(event: ProjectileHitEvent) {
         val block = event.hitBlock ?: return
-        val claim = registry.getAt(block.chunk) ?: return
+        val claim = registry.getAt(block.location) ?: return
         val shooter = event.entity.shooter as? Player
 
-        if (shooter != null && protection.canBypass(shooter, block.chunk)) return
+        if (shooter != null && protection.canBypass(shooter, block.location)) return
 
         if (!claim.allowBlockInteract) {
             event.isCancelled = true

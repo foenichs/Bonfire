@@ -31,9 +31,9 @@ class InteractProtectionListener(
         val player = event.player
 
         if (event.action == Action.RIGHT_CLICK_BLOCK || event.action == Action.PHYSICAL) {
-            if (protection.canBypass(player, block.chunk)) return
+            if (protection.canBypass(player, block.location)) return
 
-            val claim = registry.getAt(block.chunk) ?: return
+            val claim = registry.getAt(block.location) ?: return
 
             if (
                 event.action == Action.PHYSICAL &&
@@ -67,7 +67,7 @@ class InteractProtectionListener(
     @EventHandler(priority = EventPriority.LOWEST, ignoreCancelled = true)
     fun onEntityInteract(event: EntityInteractEvent) {
         val block = event.block
-        val claim = registry.getAt(block.chunk) ?: return
+        val claim = registry.getAt(block.location) ?: return
 
         if (!claim.allowBlockInteract) {
             val entity = event.entity
@@ -75,7 +75,7 @@ class InteractProtectionListener(
             // Allow projectiles shot by an added player
             if (entity is Projectile) {
                 val shooter = entity.shooter as? Player
-                if (shooter != null && protection.canBypass(shooter, block.chunk)) return
+                if (shooter != null && protection.canBypass(shooter, block.location)) return
                 event.isCancelled = true
                 return
             }
@@ -85,7 +85,7 @@ class InteractProtectionListener(
                 val throwerId = entity.thrower ?: return
                 val thrower = Bukkit.getPlayer(throwerId)
                 if (thrower != null) {
-                    if (protection.canBypass(thrower, block.chunk)) return
+                    if (protection.canBypass(thrower, block.location)) return
                 } else {
                     if (throwerId == claim.owner || claim.trustedAlways.contains(throwerId)) return
                 }
@@ -101,11 +101,11 @@ class InteractProtectionListener(
     @EventHandler(priority = EventPriority.LOWEST, ignoreCancelled = true)
     fun onReceiveGameEvent(event: BlockReceiveGameEvent) {
         val block = event.block
-        val claim = registry.getAt(block.chunk) ?: return
+        val claim = registry.getAt(block.location) ?: return
 
         if (!claim.allowBlockInteract) {
             val entity = event.entity
-            if (entity is Player && protection.canBypass(entity, block.chunk)) return
+            if (entity is Player && protection.canBypass(entity, block.location)) return
 
             event.isCancelled = true
         }
@@ -117,11 +117,11 @@ class InteractProtectionListener(
     @EventHandler(priority = EventPriority.LOWEST, ignoreCancelled = true)
     fun onVaultChange(event: VaultChangeStateEvent) {
         val block = event.block
-        val claim = registry.getAt(block.chunk) ?: return
+        val claim = registry.getAt(block.location) ?: return
 
         if (!claim.allowBlockInteract) {
             val player = event.player ?: return
-            if (protection.canBypass(player, block.chunk)) return
+            if (protection.canBypass(player, block.location)) return
 
             event.isCancelled = true
         }
