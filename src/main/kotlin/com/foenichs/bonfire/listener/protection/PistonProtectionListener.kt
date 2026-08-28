@@ -37,20 +37,20 @@ class PistonProtectionListener(
      * Check if movement goes into or out of claims
      */
     private fun isMovementIllegal(piston: Block, blocks: List<Block>, moveDir: BlockFace): Boolean {
-        val pistonChunk = piston.chunk
+        val pistonLocation = piston.location
 
         // Check the space immediately in front of the piston (the Piston Arm)
-        val faceChunk = piston.getRelative(moveDir).chunk
-        if (!protection.isWorldActionAllowed(pistonChunk, faceChunk)) return true
+        val faceLocation = piston.getRelative(moveDir).location
+        if (!protection.isWorldActionAllowed(pistonLocation, faceLocation)) return true
 
         // Check every block being moved
         for (b in blocks) {
-            val fromChunk = b.chunk
-            val toChunk = b.getRelative(moveDir).chunk
+            val fromLocation = b.location
+            val toLocation = b.getRelative(moveDir).location
 
             // Movement across borders or interaction with foreign blocks is blocked
-            if (!protection.isWorldActionAllowed(fromChunk, toChunk)) return true
-            if (!protection.isWorldActionAllowed(pistonChunk, fromChunk)) return true
+            if (!protection.isWorldActionAllowed(fromLocation, toLocation)) return true
+            if (!protection.isWorldActionAllowed(pistonLocation, fromLocation)) return true
         }
         return false
     }

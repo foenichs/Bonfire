@@ -3,6 +3,7 @@ package com.foenichs.bonfire.listener.protection
 import com.destroystokyo.paper.event.entity.PhantomPreSpawnEvent
 import com.destroystokyo.paper.event.entity.PlayerNaturallySpawnCreaturesEvent
 import com.foenichs.bonfire.Bonfire
+import com.foenichs.bonfire.model.ChunkPos
 import com.foenichs.bonfire.service.ProtectionService
 import com.foenichs.bonfire.storage.ClaimRegistry
 import org.bukkit.Bukkit
@@ -33,10 +34,10 @@ class WorldProtectionListener(
                 world.getEntitiesByClass(FallingBlock::class.java).forEach { entity ->
                     if (!entity.isValid || entity.isOnGround) return@forEach
 
-                    val chunk = entity.location.chunk
-                    val claim = registry.getAt(chunk) ?: return@forEach
+                    val location = entity.location
+                    val claim = registry.getAt(location) ?: return@forEach
 
-                    if (!claim.allowBlockBreak && !protection.isOrigin(entity, chunk)) {
+                    if (!claim.allowBlockBreak && !protection.isOrigin(entity, location)) {
                         entity.world.dropItemNaturally(entity.location, ItemStack(entity.blockData.material))
                         entity.remove()
                     }
@@ -53,9 +54,9 @@ class WorldProtectionListener(
         val vehicle = event.vehicle
         if (vehicle.passengers.isNotEmpty()) return
 
-        val from = event.from.chunk
-        val to = event.to.chunk
-        if (from == to) return
+        val from = event.from
+        val to = event.to
+        if (from.chunk == to.chunk && ChunkPos.layerFor(from) == ChunkPos.layerFor(to)) return
 
         val claim = registry.getAt(to) ?: return
         if (claim.allowEntityInteract != "true" && !protection.isOrigin(vehicle, to)) {
@@ -74,9 +75,9 @@ class WorldProtectionListener(
      */
     @EventHandler(priority = EventPriority.LOWEST, ignoreCancelled = true)
     fun onLiquidFlow(event: BlockFromToEvent) {
-        val fromChunk = event.block.chunk
+        val fromLocation = event.block.location
         val toBlock = event.toBlock
-        if (!protection.isWorldActionAllowed(fromChunk, toBlock.chunk) && !protection.checkAllowBlockBreak(toBlock.chunk)) {
+        if (!protection.isWorldActionAllowed(fromLocation, toBlock.location) && !protection.checkAllowBlockBreak(toBlock.location)) {
             event.isCancelled = true
         }
     }
@@ -87,9 +88,9 @@ class WorldProtectionListener(
     @EventHandler(priority = EventPriority.LOWEST, ignoreCancelled = true)
     fun onFireSpread(event: BlockSpreadEvent) {
         if (event.source.type != Material.FIRE) return
-        val fromChunk = event.source.chunk
-        val toChunk = event.block.chunk
-        if (!protection.isWorldActionAllowed(fromChunk, toChunk) && !protection.checkAllowBlockBreak(toChunk)) {
+        val fromLocation = event.source.location
+        val toLocation = event.block.location
+        if (!protection.isWorldActionAllowed(fromLocation, toLocation) && !protection.checkAllowBlockBreak(toLocation)) {
             event.isCancelled = true
         }
     }
@@ -100,9 +101,9 @@ class WorldProtectionListener(
     @EventHandler(priority = EventPriority.LOWEST, ignoreCancelled = true)
     fun onBlockBurn(event: BlockBurnEvent) {
         val igniter = event.ignitingBlock ?: return
-        val fromChunk = igniter.chunk
-        val toChunk = event.block.chunk
-        if (!protection.isWorldActionAllowed(fromChunk, toChunk) && !protection.checkAllowBlockBreak(toChunk)) {
+        val fromLocation = igniter.location
+        val toLocation = event.block.location
+        if (!protection.isWorldActionAllowed(fromLocation, toLocation) && !protection.checkAllowBlockBreak(toLocation)) {
             event.isCancelled = true
         }
     }
@@ -112,17 +113,17 @@ class WorldProtectionListener(
      */
     @EventHandler(priority = EventPriority.LOWEST, ignoreCancelled = true)
     fun onStructureGrow(event: StructureGrowEvent) {
-        val sourceChunk = event.location.chunk
+        val sourceLocation = event.location
 
         val iterator = event.blocks.iterator()
         while (iterator.hasNext()) {
             val state = iterator.next()
-            val targetChunk = state.chunk
+            val targetLocation = state.location
 
             // Only block if moving from outside into a protected claim
             if (!protection.isWorldActionAllowed(
-                    sourceChunk, targetChunk
-                ) && !protection.checkAllowBlockBreak(targetChunk)
+                    sourceLocation, targetLocation
+                ) && !protection.checkAllowBlockBreak(targetLocation)
             ) {
                 event.isCancelled = true
                 return
@@ -135,16 +136,16 @@ class WorldProtectionListener(
      */
     @EventHandler(priority = EventPriority.LOWEST, ignoreCancelled = true)
     fun onFertilize(event: BlockFertilizeEvent) {
-        val sourceChunk = event.block.chunk
+        val sourceLocation = event.block.location
 
         val iterator = event.blocks.iterator()
         while (iterator.hasNext()) {
             val state = iterator.next()
-            val targetChunk = state.chunk
+            val targetLocation = state.location
 
             if (!protection.isWorldActionAllowed(
-                    sourceChunk, targetChunk
-                ) && !protection.checkAllowBlockBreak(targetChunk)
+                    sourceLocation, targetLocation
+                ) && !protection.checkAllowBlockBreak(targetLocation)
             ) {
                 iterator.remove()
             }
@@ -162,10 +163,10 @@ class WorldProtectionListener(
         if (data !is Directional) return
 
         val targetBlock = block.getRelative(data.facing)
-        val fromChunk = block.chunk
-        val toChunk = targetBlock.chunk
+        val fromLocation = block.location
+        val toLocation = targetBlock.location
 
-        if (!protection.isWorldActionAllowed(fromChunk, toChunk) && !protection.checkAllowBlockBreak(toChunk)) {
+        if (!protection.isWorldActionAllowed(fromLocation, toLocation) && !protection.checkAllowBlockBreak(toLocation)) {
             event.isCancelled = true
         }
     }
@@ -178,7 +179,7 @@ class WorldProtectionListener(
         val entity = event.entity
         if (entity !is Snowman && entity !is ArmorStand && entity !is FallingBlock) return
 
-        val claim = registry.getAt(event.location.chunk)
+        val claim = registry.getAt(event.location)
         if (claim != null) {
             entity.addScoreboardTag("bonfire_origin_${claim.id}")
         }
@@ -192,7 +193,7 @@ class WorldProtectionListener(
         val vehicle = event.vehicle
         if (vehicle !is Boat && vehicle !is Minecart) return
 
-        val claim = registry.getAt(vehicle.location.chunk) ?: return
+        val claim = registry.getAt(vehicle.location) ?: return
         vehicle.addScoreboardTag("bonfire_origin_${claim.id}")
     }
 
@@ -202,18 +203,18 @@ class WorldProtectionListener(
     @EventHandler(priority = EventPriority.LOWEST, ignoreCancelled = true)
     fun onEntityBlockForm(event: EntityBlockFormEvent) {
         val entity = event.entity
-        val chunk = event.block.chunk
-        val claim = registry.getAt(chunk) ?: return
+        val location = event.block.location
+        val claim = registry.getAt(location) ?: return
 
         if (!claim.allowBlockBreak) {
             when (entity) {
                 is Player -> {
-                    if (!protection.canBypass(entity, chunk)) {
+                    if (!protection.canBypass(entity, location)) {
                         event.isCancelled = true
                     }
                 }
                 is Snowman, is ArmorStand -> {
-                    if (!protection.isOrigin(entity, chunk)) {
+                    if (!protection.isOrigin(entity, location)) {
                         event.isCancelled = true
                     }
                 }
@@ -233,10 +234,10 @@ class WorldProtectionListener(
         if (entity !is FallingBlock) return
         if (event.to == Material.AIR) return
 
-        val chunk = event.block.chunk
-        val claim = registry.getAt(chunk) ?: return
+        val location = event.block.location
+        val claim = registry.getAt(location) ?: return
 
-        if (!claim.allowBlockBreak && !protection.isOrigin(entity, chunk)) {
+        if (!claim.allowBlockBreak && !protection.isOrigin(entity, location)) {
             event.isCancelled = true
             entity.world.dropItemNaturally(entity.location, ItemStack(entity.blockData.material))
             entity.remove()
@@ -249,14 +250,14 @@ class WorldProtectionListener(
     @EventHandler(priority = EventPriority.LOWEST, ignoreCancelled = true)
     fun onPlayerNaturallySpawnCreatures(event: PlayerNaturallySpawnCreaturesEvent) {
         val player = event.player
-        val chunk = player.location.chunk
-        val claim = registry.getAt(chunk) ?: return
+        val location = player.location
+        val claim = registry.getAt(location) ?: return
 
         if (
             claim.allowEntityInteract == "false" ||
             claim.allowEntityInteract == "onlyMounts"
         ) {
-            if (!protection.canBypass(player, chunk)) {
+            if (!protection.canBypass(player, location)) {
                 event.isCancelled = true
             }
         }
@@ -268,14 +269,14 @@ class WorldProtectionListener(
     @EventHandler(priority = EventPriority.LOWEST, ignoreCancelled = true)
     fun onPhantomPreSpawn(event: PhantomPreSpawnEvent) {
         val player = event.spawningEntity as? Player ?: return
-        val chunk = player.location.chunk
-        val claim = registry.getAt(chunk) ?: return
+        val location = player.location
+        val claim = registry.getAt(location) ?: return
 
         if (
             claim.allowEntityInteract == "false" ||
             claim.allowEntityInteract == "onlyMounts"
         ) {
-            if (!protection.canBypass(player, chunk)) {
+            if (!protection.canBypass(player, location)) {
                 event.isCancelled = true
             }
         }

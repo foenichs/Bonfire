@@ -2,8 +2,8 @@ package com.foenichs.bonfire.service
 
 import com.foenichs.bonfire.storage.ClaimRegistry
 import org.bukkit.Bukkit
-import org.bukkit.Chunk
 import org.bukkit.GameMode
+import org.bukkit.Location
 import org.bukkit.entity.AbstractHorse
 import org.bukkit.entity.Entity
 import org.bukkit.entity.Player
@@ -14,10 +14,10 @@ class ProtectionService(private val registry: ClaimRegistry) {
     /**
      * Standard bypass check (Owner, TrustedAlways, TrustedOnline, or Creative+OP/Spectator)
      */
-    fun canBypass(player: Player, chunk: Chunk): Boolean {
+    fun canBypass(player: Player, location: Location): Boolean {
         if (player.gameMode == GameMode.SPECTATOR || (player.gameMode == GameMode.CREATIVE && player.isOp)) return true
 
-        val claim = registry.getAt(chunk) ?: return true
+        val claim = registry.getAt(location) ?: return true
         val uuid = player.uniqueId
 
         if (claim.owner == uuid) return true
@@ -30,10 +30,10 @@ class ProtectionService(private val registry: ClaimRegistry) {
     }
 
     /**
-     * Checks if the entity has a bonfire_origin_{claim.id} tag for the given chunk's claim
+     * Checks if the entity has a bonfire_origin_{claim.id} tag for the given location's claim
      */
-    fun isOrigin(entity: Entity?, chunk: Chunk): Boolean {
-        val claim = registry.getAt(chunk) ?: return false
+    fun isOrigin(entity: Entity?, location: Location): Boolean {
+        val claim = registry.getAt(location) ?: return false
         val tags = entity?.scoreboardTags ?: return false
 
         // Current ID
@@ -55,7 +55,7 @@ class ProtectionService(private val registry: ClaimRegistry) {
     /**
      * Logic for world interactions (Pistons, Water)
      */
-    fun isWorldActionAllowed(from: Chunk, to: Chunk): Boolean {
+    fun isWorldActionAllowed(from: Location, to: Location): Boolean {
         val claimFrom = registry.getAt(from)
         val claimTo = registry.getAt(to) ?: return true
         if (claimFrom?.id == claimTo.id) return true
@@ -76,8 +76,8 @@ class ProtectionService(private val registry: ClaimRegistry) {
     /**
      * Checks allowBlockBreak for a block
      */
-    fun checkAllowBlockBreak(targetChunk: Chunk): Boolean {
-        val claim = registry.getAt(targetChunk) ?: return true
+    fun checkAllowBlockBreak(targetLocation: Location): Boolean {
+        val claim = registry.getAt(targetLocation) ?: return true
         return claim.allowBlockBreak
     }
 }
