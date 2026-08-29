@@ -5,7 +5,7 @@ plugins {
 }
 
 group = "com.foenichs"
-version = "1.5.3"
+version = "1.6"
 
 repositories {
     mavenCentral()

@@ -1,4 +1,4 @@
-package com.foenichs.bonfire.service
+package com.foenichs.bonfire.service.map
 
 import com.foenichs.bonfire.model.Claim
 import java.util.UUID
