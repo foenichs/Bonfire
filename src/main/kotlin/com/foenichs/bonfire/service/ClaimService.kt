@@ -6,6 +6,7 @@ import com.foenichs.bonfire.model.ChunkLayer
 import com.foenichs.bonfire.model.ChunkPos
 import com.foenichs.bonfire.model.Claim
 import com.foenichs.bonfire.model.opposite
+import com.foenichs.bonfire.service.map.ClaimMapService
 import com.foenichs.bonfire.storage.ClaimRegistry
 import com.foenichs.bonfire.storage.DatabaseManager
 import com.foenichs.bonfire.ui.Messenger

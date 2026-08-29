@@ -1,6 +1,5 @@
-package com.foenichs.bonfire.service
+package com.foenichs.bonfire.service.map
 
-import com.foenichs.bonfire.model.Claim
 import kotlin.math.abs
 
 data class ClaimMapPoint(val x: Double, val z: Double)
@@ -28,12 +27,9 @@ object ClaimPolygonTracer {
         }
     }
 
-    fun trace(claim: Claim): ClaimPolygonData? {
-        if (claim.chunks.isEmpty()) return null
+    fun traceChunks(chunkSet: Set<Pair<Int, Int>>): ClaimPolygonData? {
+        if (chunkSet.isEmpty()) return null
 
-        val chunkSet = claim.chunks
-            .map { it.chunkKey.toInt() to (it.chunkKey shr 32).toInt() }
-            .toSet()
         val segments = HashSet<Segment>()
 
         chunkSet.forEach { (cx, cz) ->

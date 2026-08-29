@@ -1,6 +1,7 @@
-package com.foenichs.bonfire.service
+package com.foenichs.bonfire.service.map
 
 import com.foenichs.bonfire.Bonfire
+import com.foenichs.bonfire.model.ChunkLayer
 import com.foenichs.bonfire.model.Claim
 import com.foenichs.bonfire.storage.ClaimRegistry
 import org.bukkit.Bukkit
@@ -57,7 +58,15 @@ class SquaremapService(
 
     private fun createMarker(provider: SimpleLayerProvider, claim: Claim) {
         val id = claim.id ?: return
-        val polygon = ClaimPolygonTracer.trace(claim) ?: return
+        // Squaremap doesn't render the Nether roof, so only ground chunks are shown
+        val groundChunks = claim.chunks.filter { it.layer == ChunkLayer.GROUND }
+            .map { it.chunkKey.toInt() to (it.chunkKey shr 32).toInt() }
+            .toSet()
+        val polygon = ClaimPolygonTracer.traceChunks(groundChunks)
+        if (polygon == null) {
+            provider.removeMarker(markerKey(id))
+            return
+        }
         val ownerName = Bukkit.getOfflinePlayer(claim.owner).name ?: "Unknown"
         val labelTemplate = plugin.config.getString("squaremap.label", "Claimed by \$name")!!
         val label = labelTemplate.replace("\$name", ownerName)

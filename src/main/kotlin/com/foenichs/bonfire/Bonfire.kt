@@ -5,6 +5,10 @@ import com.foenichs.bonfire.command.ChunkCommand
 import com.foenichs.bonfire.listener.PlayerListener
 import com.foenichs.bonfire.listener.protection.*
 import com.foenichs.bonfire.service.*
+import com.foenichs.bonfire.service.map.BlueMapClaimMapService
+import com.foenichs.bonfire.service.map.BlueMapService
+import com.foenichs.bonfire.service.map.ClaimMapService
+import com.foenichs.bonfire.service.map.SquaremapService
 import com.foenichs.bonfire.storage.ClaimRegistry
 import com.foenichs.bonfire.storage.DatabaseManager
 import com.foenichs.bonfire.ui.Messenger
