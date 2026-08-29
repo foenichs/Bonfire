@@ -15,6 +15,7 @@ import net.kyori.adventure.text.format.NamedTextColor
 import net.kyori.adventure.text.format.TextDecoration
 import org.bukkit.Bukkit
 import org.bukkit.Chunk
+import org.bukkit.Location
 import org.bukkit.World
 import org.bukkit.entity.Player
 import java.util.*
@@ -39,12 +40,15 @@ class ClaimService(
         return claim != null && claim.owner == p.uniqueId
     }
 
+    private fun chunkWord(loc: Location, layer: ChunkLayer) =
+        if (loc.world.environment == World.Environment.NETHER) { if (layer == ChunkLayer.ROOF) "roof chunk" else "ground chunk" } else "chunk"
+
     /**
      * Claiming a chunk and either adding it to a claim or creating a new claim
      */
     fun tryClaim(p: Player) {
         val loc = p.location; val ch = loc.chunk; val w = ch.world.uid; val k = ch.chunkKey; val layer = ChunkPos.layerFor(loc)
-        val chunkWord = if (ch.world.environment == World.Environment.NETHER) { if (layer == ChunkLayer.ROOF) "roof chunk" else "ground chunk" } else "chunk"
+        val word = chunkWord(loc, layer)
         val limits = limits.getLimits(p)
         if (registry.getAt(w, k, layer) != null) return
         if (registry.getOwnedChunks(p.uniqueId) >= limits.maxChunks) {
@@ -59,7 +63,7 @@ class ClaimService(
                 val c = adj.first(); val pos = ChunkPos(w, k, layer); c.chunks.add(pos); db.addChunk(c.id!!, pos)
                 migrationService.processChunk(ch)
                 updateClaimMarkers(c)
-                msg.send(p, Component.text("Successfully claimed this $chunkWord and added it to your claim."))
+                msg.send(p, Component.text("Successfully claimed this $word and added it to your claim."))
                 finishAction(p, c.owner)
             }
             adj.size > 1 -> {
@@ -84,7 +88,7 @@ class ClaimService(
                     registry.add(claim); db.addChunk(id, pos); db.updateRules(claim)
                     migrationService.processChunk(ch)
                     updateClaimMarkers(claim)
-                    msg.send(p, Component.text("Successfully claimed this $chunkWord and created a new claim."))
+                    msg.send(p, Component.text("Successfully claimed this $word and created a new claim."))
                     finishAction(p, claim.owner)
                 }
             }
@@ -96,16 +100,17 @@ class ClaimService(
      */
     fun tryUnclaim(p: Player) {
         if (!verifyPermissions(p)) { msg.sendNoAccess(p); return }
-        val loc = p.location; val pos = ChunkPos(loc.world.uid, loc.chunk.chunkKey, ChunkPos.layerFor(loc)); val c = registry.getAt(pos.worldUuid, pos.chunkKey, pos.layer) ?: return
+        val loc = p.location; val layer = ChunkPos.layerFor(loc); val word = chunkWord(loc, layer)
+        val pos = ChunkPos(loc.world.uid, loc.chunk.chunkKey, layer); val c = registry.getAt(pos.worldUuid, pos.chunkKey, pos.layer) ?: return
         if (c.chunks.size <= 1) {
             handleClaimRemoval(c)
-            msg.send(p, Component.text("Successfully unclaimed this chunk and deleted the claim."))
+            msg.send(p, Component.text("Successfully unclaimed this $word and deleted the claim."))
         } else if (isConnected(c, pos)) {
             handleChunkUnclaim(c, pos)
-            msg.send(p, Component.text("Successfully unclaimed this chunk and removed it from your claim."))
+            msg.send(p, Component.text("Successfully unclaimed this $word and removed it from your claim."))
             finishAction(p, null)
         } else {
-            msg.send(p, Component.text().append(Component.text("You can't unclaim this chunk. ")).append(Component.text("Unclaiming it would split up your claim, please unclaim outer chunks first.", NamedTextColor.GRAY)).build())
+            msg.send(p, Component.text().append(Component.text("You can't unclaim this $word. ")).append(Component.text("Unclaiming it would split up your claim, please unclaim outer chunks first.", NamedTextColor.GRAY)).build())
         }
     }
 
@@ -139,17 +144,18 @@ class ClaimService(
      * Unclaim a chunk (OP-only)
      */
     fun adminUnclaimChunk(p: Player) {
-        val loc = p.location; val pos = ChunkPos(loc.world.uid, loc.chunk.chunkKey, ChunkPos.layerFor(loc)); val claim = registry.getAt(loc) ?: run { msg.send(p, Component.text("Nothing changed, you are not inside a claim.")); return }
+        val loc = p.location; val layer = ChunkPos.layerFor(loc); val word = chunkWord(loc, layer)
+        val pos = ChunkPos(loc.world.uid, loc.chunk.chunkKey, layer); val claim = registry.getAt(loc) ?: run { msg.send(p, Component.text("Nothing changed, you are not inside a claim.")); return }
 
         if (claim.chunks.size <= 1) {
             handleClaimRemoval(claim)
             msg.send(p, Component.text("Successfully removed the claim and unclaimed all chunks."))
         } else if (isConnected(claim, pos)) {
             handleChunkUnclaim(claim, pos)
-            msg.send(p, Component.text("Successfully unclaimed this chunk as an operator."))
+            msg.send(p, Component.text("Successfully unclaimed this $word as an operator."))
             finishAction(p, null)
         } else {
-            msg.send(p, Component.text("You can't unclaim this chunk. Unclaiming it would split up this claim, please unclaim outer chunks first."))
+            msg.send(p, Component.text("You can't unclaim this $word. Unclaiming it would split up this claim, please unclaim outer chunks first."))
         }
     }
 
