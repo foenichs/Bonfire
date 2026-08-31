@@ -4,6 +4,7 @@ import com.foenichs.bonfire.model.Claim
 import com.foenichs.bonfire.service.ClaimService
 import com.foenichs.bonfire.service.LimitService
 import com.foenichs.bonfire.storage.ClaimRegistry
+import com.foenichs.bonfire.ui.Dialogs
 import com.foenichs.bonfire.ui.Messenger
 import com.mojang.brigadier.arguments.StringArgumentType
 import io.papermc.paper.command.brigadier.Commands
@@ -22,7 +23,6 @@ import org.bukkit.entity.Player
 import org.bukkit.permissions.Permission
 import org.bukkit.permissions.PermissionDefault
 
-@Suppress("UnstableApiUsage")
 class ChunkCommand(
     private val service: ClaimService,
     private val registry: ClaimRegistry,
@@ -133,6 +133,7 @@ class ChunkCommand(
         registrar.register(node.build(), "The core command of Bonfire.")
     }
 
+    @Suppress("UnstableApiUsage")
     private fun showAddDialog(p: Player, target: String) {
         val dialog = Dialog.create { b ->
             b.empty().base(
@@ -171,13 +172,5 @@ class ChunkCommand(
     /**
      * Validation for profile names
      */
-    private fun getResolvedName(p: Player, input: String): String? {
-        val offline = Bukkit.getOfflinePlayers().find { it.name?.equals(input, true) == true }
-        if (offline == null || (!offline.hasPlayedBefore() && !offline.isOnline)) {
-            msg.send(p, Component.text().append(Component.text("This player wasn't found. "))
-                .append(Component.text("They have to join once before they can be added to claims.", NamedTextColor.GRAY)).build())
-            return null
-        }
-        return offline.name
-    }
+    private fun getResolvedName(p: Player, input: String): String? = Dialogs.resolvePlayer(p, input)?.name
 }

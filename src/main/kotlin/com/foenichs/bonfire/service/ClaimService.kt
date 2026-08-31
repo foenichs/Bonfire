@@ -9,6 +9,7 @@ import com.foenichs.bonfire.model.opposite
 import com.foenichs.bonfire.service.map.ClaimMapService
 import com.foenichs.bonfire.storage.ClaimRegistry
 import com.foenichs.bonfire.storage.DatabaseManager
+import com.foenichs.bonfire.ui.Dialogs
 import com.foenichs.bonfire.ui.Messenger
 import net.kyori.adventure.text.Component
 import net.kyori.adventure.text.format.NamedTextColor
@@ -118,8 +119,8 @@ class ClaimService(
      * Set a new owner for a claim (OP-only)
      */
     fun adminSetOwner(p: Player, newOwnerName: String) {
-        val claim = registry.getAt(p.location) ?: run { msg.send(p, Component.text("Nothing changed, you aren't inside a claimed chunk.")); return }
-        val offline = Bukkit.getOfflinePlayers().find { it.name?.equals(newOwnerName, true) == true } ?: run { msg.send(p, Component.text("Nothing changed, that player wasn't found on the server.")); return }
+        val claim = registry.getAt(p.location) ?: run { Dialogs.nothingChanged(p, "you aren't inside a claimed chunk."); return }
+        val offline = Dialogs.resolvePlayer(p, newOwnerName) ?: return
 
         val oldOwnerId = claim.owner
         claim.owner = offline.uniqueId
@@ -135,7 +136,7 @@ class ClaimService(
      * Remove a claim (OP-only)
      */
     fun adminRemoveClaim(p: Player) {
-        val claim = registry.getAt(p.location) ?: run { msg.send(p, Component.text("Nothing changed, you aren't inside a claim.")); return }
+        val claim = registry.getAt(p.location) ?: run { Dialogs.nothingChanged(p, "you aren't inside a claim."); return }
         handleClaimRemoval(claim)
         msg.send(p, Component.text("Successfully removed the claim and unclaimed all chunks."))
     }
@@ -145,7 +146,7 @@ class ClaimService(
      */
     fun adminUnclaimChunk(p: Player) {
         val loc = p.location; val layer = ChunkPos.layerFor(loc); val word = chunkWord(loc, layer)
-        val pos = ChunkPos(loc.world.uid, loc.chunk.chunkKey, layer); val claim = registry.getAt(loc) ?: run { msg.send(p, Component.text("Nothing changed, you are not inside a claim.")); return }
+        val pos = ChunkPos(loc.world.uid, loc.chunk.chunkKey, layer); val claim = registry.getAt(loc) ?: run { Dialogs.nothingChanged(p, "you are not inside a claim."); return }
 
         if (claim.chunks.size <= 1) {
             handleClaimRemoval(claim)
@@ -163,10 +164,10 @@ class ClaimService(
      * Remove all claims owned by a player (OP-only)
      */
     fun adminRemoveAll(p: Player, targetName: String) {
-        val offline = Bukkit.getOfflinePlayers().find { it.name?.equals(targetName, true) == true } ?: run { msg.send(p, Component.text("Nothing changed, that player wasn't found on the server.")); return }
+        val offline = Dialogs.resolvePlayer(p, targetName) ?: return
         val targetClaims = registry.getAll().filter { it.owner == offline.uniqueId }
 
-        if (targetClaims.isEmpty()) { msg.send(p, Component.text("Nothing changed, this player has no claims.")); return }
+        if (targetClaims.isEmpty()) { Dialogs.playerHasNoClaims(p, offline.name ?: targetName); return }
 
         targetClaims.forEach { handleClaimRemoval(it) }
         msg.send(p, Component.text("Successfully removed ${targetClaims.size} claims owned by ${offline.name} and unclaimed all chunks."))
@@ -198,11 +199,7 @@ class ClaimService(
     fun addTrust(p: Player, n: String, t: String) {
         if (!verifyPermissions(p)) { msg.sendNoAccess(p); return }
         val c = registry.getAt(p.location) ?: return
-        val off = Bukkit.getOfflinePlayers().find { it.name?.equals(n, true) == true }
-        if (off == null || (!off.hasPlayedBefore() && !off.isOnline)) {
-            msg.send(p, Component.text().append(Component.text("This player wasn't found. ")).append(Component.text("They have to join once before they can be added to claims.", NamedTextColor.GRAY)).build())
-            return
-        }
+        val off = Dialogs.resolvePlayer(p, n) ?: return
 
         val isAlways = t == "always"
         if ((isAlways && c.trustedAlways.contains(off.uniqueId)) || (!isAlways && c.trustedOnline.contains(off.uniqueId))) {
@@ -230,7 +227,7 @@ class ClaimService(
     fun removeTrust(p: Player, n: String) {
         if (!verifyPermissions(p)) { msg.sendNoAccess(p); return }
         val c = registry.getAt(p.location) ?: return
-        val id = Bukkit.getOfflinePlayers().find { it.name?.equals(n, true) == true }?.uniqueId ?: return
+        val id = Dialogs.resolvePlayer(p, n)?.uniqueId ?: return
         if (c.trustedAlways.remove(id) || c.trustedOnline.remove(id)) {
             db.removeTrust(c.id!!, id)
             msg.send(p, Component.text().append(Component.text("Removed ")).append(msg.head(n)).append(Component.space()).append(Component.text(n, NamedTextColor.WHITE, TextDecoration.BOLD)).append(Component.text(" from your claim.")).build())
