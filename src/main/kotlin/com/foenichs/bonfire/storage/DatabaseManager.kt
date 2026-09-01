@@ -20,6 +20,7 @@ class DatabaseManager(dataFolder: File) {
         s.execute("CREATE TABLE IF NOT EXISTS trusted_players (claim_id INTEGER, player_uuid TEXT NOT NULL, trust_type TEXT NOT NULL, FOREIGN KEY(claim_id) REFERENCES claims(id) ON DELETE CASCADE)")
         s.execute("CREATE TABLE IF NOT EXISTS claim_aliases (claim_id INTEGER, legacy_id INTEGER, FOREIGN KEY(claim_id) REFERENCES claims(id) ON DELETE CASCADE)")
         s.execute("CREATE TABLE IF NOT EXISTS migration_queue (world_uuid TEXT NOT NULL, chunk_key INTEGER NOT NULL)")
+        s.execute("CREATE TABLE IF NOT EXISTS limit_overrides (player_uuid TEXT PRIMARY KEY, extra_chunks INTEGER NOT NULL DEFAULT 0, extra_claims INTEGER NOT NULL DEFAULT 0)")
 
         // Migrate table when updating to 1.6
         val hasLayerColumn = connection.metaData.getColumns(null, null, "claim_chunks", "layer").use { it.next() }
@@ -154,4 +155,16 @@ class DatabaseManager(dataFolder: File) {
     }
 
     fun close() = connection.close()
+
+    fun getLimitOverride(u: UUID): Pair<Int, Int> {
+        val ps = connection.prepareStatement("SELECT extra_chunks, extra_claims FROM limit_overrides WHERE player_uuid = ?")
+        ps.setString(1, u.toString())
+        val rs = ps.executeQuery()
+        return if (rs.next()) rs.getInt("extra_chunks") to rs.getInt("extra_claims") else 0 to 0
+    }
+
+    fun setLimitOverride(u: UUID, extraChunks: Int, extraClaims: Int) {
+        val ps = connection.prepareStatement("INSERT OR REPLACE INTO limit_overrides (player_uuid, extra_chunks, extra_claims) VALUES (?, ?, ?)")
+        ps.setString(1, u.toString()); ps.setInt(2, extraChunks); ps.setInt(3, extraClaims); ps.executeUpdate()
+    }
 }

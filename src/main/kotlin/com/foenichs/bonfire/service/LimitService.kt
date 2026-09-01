@@ -1,11 +1,11 @@
 package com.foenichs.bonfire.service
 
-import com.foenichs.bonfire.storage.ClaimRegistry
+import com.foenichs.bonfire.storage.DatabaseManager
 import org.bukkit.Statistic
 import org.bukkit.configuration.file.FileConfiguration
 import org.bukkit.entity.Player
 
-class LimitService(private var config: FileConfiguration, registry: ClaimRegistry) {
+class LimitService(private var config: FileConfiguration, private val db: DatabaseManager) {
     data class Limits(val maxChunks: Int, val maxClaims: Int)
 
     fun updateConfig(c: FileConfiguration) {
@@ -27,6 +27,7 @@ class LimitService(private var config: FileConfiguration, registry: ClaimRegistr
         val fCl = config.getInt("limits.starting-values.claims", 1) + earnedCl
         val mCh = config.getInt("limits.maximum.chunks", -1)
         val mCl = config.getInt("limits.maximum.claims", 5)
-        return Limits(if (mCh == -1) fCh else fCh.coerceAtMost(mCh),if (mCl == -1) fCl else fCl.coerceAtMost(mCl))
+        val (extraCh, extraCl) = db.getLimitOverride(p.uniqueId)
+        return Limits((if (mCh == -1) fCh else fCh.coerceAtMost(mCh)) + extraCh,(if (mCl == -1) fCl else fCl.coerceAtMost(mCl)) + extraCl)
     }
 }

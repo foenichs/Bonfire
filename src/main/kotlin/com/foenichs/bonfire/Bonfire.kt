@@ -54,7 +54,7 @@ class Bonfire : JavaPlugin() {
 
         // Initialize Services
         val messenger = Messenger()
-        val limitService = LimitService(config, registry)
+        val limitService = LimitService(config, db)
         protectionService = ProtectionService(registry)
         visualService = VisualService(this, registry, protectionService, limitService)
         val migrationService = MigrationService(this, db, registry, protectionService)
@@ -88,7 +88,7 @@ class Bonfire : JavaPlugin() {
                 reloadConfig()
                 limitService.updateConfig(config)
                 mapServices.forEach { it.refreshAll() }
-            }, claimService).register(event.registrar())
+            }, claimService, db, messenger).register(event.registrar())
         }
 
         // Register Event Listeners
