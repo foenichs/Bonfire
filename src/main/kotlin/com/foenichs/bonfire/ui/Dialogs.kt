@@ -29,6 +29,22 @@ object Dialogs {
         return offline
     }
 
+    fun chunkClaimed(viewer: Player, ownerName: String) {
+        val cropped = ownerName.take(16)
+        viewer.showDialog(overviewDialog(
+            Component.text("The chunk you're currently in is claimed by ")
+                .append(msg.head(cropped))
+                .append(Component.text(" $cropped").decorate(TextDecoration.BOLD).append(Component.text(".")))
+        ))
+    }
+
+    fun cannotClaim(viewer: Player) {
+        viewer.showDialog(overviewDialog(
+            Component.text("You can't claim this chunk.")
+                .append(Component.text(" You have either reached your claim limit or you haven't earned any claims yet.", NamedTextColor.GRAY))
+        ))
+    }
+
     fun nothingChanged(viewer: Player, reason: String) {
         viewer.showDialog(errorDialog(Component.text("Nothing changed, as $reason")))
     }
@@ -52,6 +68,19 @@ object Dialogs {
             .append(Component.text("They must join once before they can be interacted with.", NamedTextColor.GRAY))
             .build()
     )
+
+    /**
+     * Template used by overview dialogs
+     */
+    private fun overviewDialog(body: Component): Dialog = Dialog.create { b ->
+        b.empty().base(
+            DialogBase.builder(Component.text("Overview"))
+                .body(listOf(DialogBody.plainMessage(body)))
+                .build()
+        ).type(
+            DialogType.multiAction(listOf(ActionButton.builder(Component.text("Ok")).build())).build()
+        )
+    }
 
     /**
      * Template used by other error-related dialogs

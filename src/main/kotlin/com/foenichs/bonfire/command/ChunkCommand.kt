@@ -44,11 +44,17 @@ class ChunkCommand(
 
         val node = Commands.literal("chunk").executes { ctx ->
             val p = ctx.source.sender as? Player ?: return@executes 0
+            val claim = registry.getAt(p.location)
             val canClaim =
-                registry.getAt(p.location) == null && registry.getOwnedChunks(p.uniqueId) < limits.getLimits(p).maxChunks
+                claim == null && registry.getOwnedChunks(p.uniqueId) < limits.getLimits(p).maxChunks
 
             if (!canClaim && !isOwner(p)) {
-                msg.sendNoAccess(p)
+                if (claim != null) {
+                    val ownerName = Bukkit.getOfflinePlayer(claim.owner).name ?: "Unknown"
+                    Dialogs.chunkClaimed(p, ownerName)
+                } else {
+                    Dialogs.cannotClaim(p)
+                }
             } else {
                 ctx.source.sender.sendMessage(Component.text("Usage: /chunk <subcommand>", NamedTextColor.RED))
             }
