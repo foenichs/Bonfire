@@ -122,9 +122,9 @@ class BonfireCommand(
                         val newClaims = view.getText("claims")?.toIntOrNull() ?: 0
                         db.setLimitOverride(target.uniqueId, newChunks, newClaims)
                         msg.send(p, Component.text()
-                            .append(Component.text("Set "))
+                            .append(Component.text("Successfully updated the additional limits for "))
                             .append(msg.head(name)).append(Component.space()).append(Component.text(name, NamedTextColor.WHITE, TextDecoration.BOLD))
-                            .append(Component.text("'s limit overrides to $newChunks chunks and $newClaims claims.")).build())
+                            .append(Component.text(" to $newChunks chunks and $newClaims claims.")).build())
                     }, ClickCallback.Options.builder().uses(1).build())),
                     ActionButton.create(Component.text("Reset values"), null, 90, DialogAction.customClick({ _, audience ->
                         audience.showDialog(overrideLimitsDialog(p, target, 0, 0))

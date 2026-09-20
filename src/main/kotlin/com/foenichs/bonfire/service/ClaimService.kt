@@ -52,11 +52,7 @@ class ClaimService(
         val word = chunkWord(loc, layer)
         val limits = limits.getLimits(p)
         if (registry.getAt(w, k, layer) != null) return
-        if (registry.getOwnedChunks(p.uniqueId) >= limits.maxChunks) {
-            msg.send(p, Component.text().append(Component.text("You've reached your chunk limit. "))
-                .append(Component.text("Keep playing to earn more chunks and claims.", NamedTextColor.GRAY)).build())
-            return
-        }
+        if (registry.getOwnedChunks(p.uniqueId) >= limits.maxChunks) return
 
         val adj = findAdj(p, w, ch.x, ch.z, layer)
         when {
@@ -72,26 +68,23 @@ class ClaimService(
                 if (ex != null && ex.chunkKey == k && ex.layer == layer && (now - ex.time) <= 15000) { executeMerge(p, ex); pending.remove(p.uniqueId) }
                 else {
                     pending[p.uniqueId] = PendingMerge(w, k, layer, adj.sortedBy { it.id }, now)
-                    msg.send(p, Component.text().append(Component.text("Claiming this chunk would merge two claims, overriding the settings of the claim that was created later.", NamedTextColor.GRAY)).append(Component.text(" If you want to merge both claims, run that command again.", NamedTextColor.WHITE)).build())
+                    msg.send(p, Component.text().append(Component.text("Claiming this chunk would merge two claims, overriding the settings of the claim that was created later.", NamedTextColor.GRAY))
+                        .append(Component.text(" If you want to merge both claims, run that command again.", NamedTextColor.WHITE)).build())
                 }
             }
             else -> {
-                if (registry.getOwnedClaimsCount(p.uniqueId) >= limits.maxClaims) {
-                    msg.send(p, Component.text().append(Component.text("You've reached your claim limit. "))
-                        .append(Component.text("Keep playing to earn more chunks and claims.", NamedTextColor.GRAY)).build())
-                } else {
-                    val id = db.createClaim(p.uniqueId); val pos = ChunkPos(w, k, layer)
-                    val defBreak = plugin.config.getBoolean("default-rules.allowBlockBreak", false)
-                    val defInteract = plugin.config.getBoolean("default-rules.allowBlockInteract", false)
-                    val defEntity = plugin.config.getString("default-rules.allowEntityInteract", "false")!!
+                if (registry.getOwnedClaimsCount(p.uniqueId) >= limits.maxClaims) return
+                val id = db.createClaim(p.uniqueId); val pos = ChunkPos(w, k, layer)
+                val defBreak = plugin.config.getBoolean("default-rules.allowBlockBreak", false)
+                val defInteract = plugin.config.getBoolean("default-rules.allowBlockInteract", false)
+                val defEntity = plugin.config.getString("default-rules.allowEntityInteract", "false")!!
 
-                    val claim = Claim(id, p.uniqueId, mutableSetOf(pos), defBreak, defInteract, defEntity)
-                    registry.add(claim); db.addChunk(id, pos); db.updateRules(claim)
-                    migrationService.processChunk(ch)
-                    updateClaimMarkers(claim)
-                    msg.send(p, Component.text("Successfully claimed this $word and created a new claim."))
-                    finishAction(p, claim.owner)
-                }
+                val claim = Claim(id, p.uniqueId, mutableSetOf(pos), defBreak, defInteract, defEntity)
+                registry.add(claim); db.addChunk(id, pos); db.updateRules(claim)
+                migrationService.processChunk(ch)
+                updateClaimMarkers(claim)
+                msg.send(p, Component.text("Successfully claimed this $word and created a new claim."))
+                finishAction(p, claim.owner)
             }
         }
     }
@@ -100,7 +93,7 @@ class ClaimService(
      * Unclaiming a chunk and either removing it from the claim or deleting the claim
      */
     fun tryUnclaim(p: Player) {
-        if (!verifyPermissions(p)) { msg.sendNoAccess(p); return }
+        if (!verifyPermissions(p)) return
         val loc = p.location; val layer = ChunkPos.layerFor(loc); val word = chunkWord(loc, layer)
         val pos = ChunkPos(loc.world.uid, loc.chunk.chunkKey, layer); val c = registry.getAt(pos.worldUuid, pos.chunkKey, pos.layer) ?: return
         if (c.chunks.size <= 1) {
@@ -111,7 +104,8 @@ class ClaimService(
             msg.send(p, Component.text("Successfully unclaimed this $word and removed it from your claim."))
             finishAction(p, null)
         } else {
-            msg.send(p, Component.text().append(Component.text("You can't unclaim this $word. ")).append(Component.text("Unclaiming it would split up your claim, please unclaim outer chunks first.", NamedTextColor.GRAY)).build())
+            msg.send(p, Component.text().append(Component.text("You can't unclaim this $word. "))
+                .append(Component.text("Unclaiming it would split up your claim, please unclaim outer chunks first.", NamedTextColor.GRAY)).build())
         }
     }
 
@@ -177,7 +171,7 @@ class ClaimService(
      * Change a claim rule
      */
     fun setRule(p: Player, r: String, v: String) {
-        if (!verifyPermissions(p)) { msg.sendNoAccess(p); return }
+        if (!verifyPermissions(p)) return
         val c = registry.getAt(p.location) ?: return
         if (r == "allowEntityInteract" && v != "true" && v != "false" && v != "onlyMounts") return
         when(r) { "allowBlockBreak" -> c.allowBlockBreak = v.toBoolean(); "allowBlockInteract" -> c.allowBlockInteract = v.toBoolean(); "allowEntityInteract" -> c.allowEntityInteract = v }
@@ -197,7 +191,7 @@ class ClaimService(
      * Add players to claims
      */
     fun addTrust(p: Player, n: String, t: String) {
-        if (!verifyPermissions(p)) { msg.sendNoAccess(p); return }
+        if (!verifyPermissions(p)) return
         val c = registry.getAt(p.location) ?: return
         val off = Dialogs.resolvePlayer(p, n) ?: return
 
@@ -215,7 +209,10 @@ class ClaimService(
 
         val verb = if (isUpdate) "Updated " else "Added "
         val desc = if (isAlways) "They aren't affected by claim rules anymore, even when you're not online." else "While you're online, they aren't affected by claim rules anymore."
-        msg.send(p, Component.text().append(Component.text(verb)).append(msg.head(n)).append(Component.space()).append(Component.text(n, NamedTextColor.WHITE, TextDecoration.BOLD)).append(Component.text(" in your claim. ")).append(Component.text(desc, NamedTextColor.GRAY)).build())
+        msg.send(p, Component.text().append(Component.text(verb))
+            .append(msg.head(n)).append(Component.space()).append(Component.text(n, NamedTextColor.WHITE, TextDecoration.BOLD))
+            .append(Component.text(" to your claim. "))
+            .append(Component.text(desc, NamedTextColor.GRAY)).build())
 
         finishActionForClaim(c)
         off.player?.let { visualService.updateValues(it) }
@@ -225,12 +222,14 @@ class ClaimService(
      * Remove added players from claims
      */
     fun removeTrust(p: Player, n: String) {
-        if (!verifyPermissions(p)) { msg.sendNoAccess(p); return }
+        if (!verifyPermissions(p)) return
         val c = registry.getAt(p.location) ?: return
         val id = Dialogs.resolvePlayer(p, n)?.uniqueId ?: return
         if (c.trustedAlways.remove(id) || c.trustedOnline.remove(id)) {
             db.removeTrust(c.id!!, id)
-            msg.send(p, Component.text().append(Component.text("Removed ")).append(msg.head(n)).append(Component.space()).append(Component.text(n, NamedTextColor.WHITE, TextDecoration.BOLD)).append(Component.text(" from your claim.")).build())
+            msg.send(p, Component.text().append(Component.text("Removed "))
+                .append(msg.head(n)).append(Component.space()).append(Component.text(n, NamedTextColor.WHITE, TextDecoration.BOLD))
+                .append(Component.text(" from your claim.")).build())
             finishActionForClaim(c)
             Bukkit.getPlayer(id)?.let { visualService.updateValues(it) }
         }
