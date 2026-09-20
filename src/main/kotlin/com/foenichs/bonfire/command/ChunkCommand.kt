@@ -20,6 +20,10 @@ import net.kyori.adventure.text.format.NamedTextColor
 import net.kyori.adventure.text.format.TextDecoration
 import org.bukkit.Bukkit
 import org.bukkit.entity.Player
+import org.bukkit.event.EventHandler
+import org.bukkit.event.EventPriority
+import org.bukkit.event.Listener
+import org.bukkit.event.player.PlayerCommandPreprocessEvent
 import org.bukkit.permissions.Permission
 import org.bukkit.permissions.PermissionDefault
 
@@ -28,7 +32,8 @@ class ChunkCommand(
     private val registry: ClaimRegistry,
     private val limits: LimitService,
     private val msg: Messenger
-) {
+) : Listener {
+
     fun register(registrar: Commands) {
         /** Register command permissions to override the default Operator access */
         val pm = Bukkit.getPluginManager()
@@ -139,6 +144,99 @@ class ChunkCommand(
         registrar.register(node.build(), "The core command of Bonfire.")
     }
 
+    /**
+     * Error feedback for dynamic subcommands
+     */
+    @EventHandler(priority = EventPriority.LOWEST)
+    fun onCommandPreprocess(event: PlayerCommandPreprocessEvent) {
+        val message = event.message.trim()
+        val parts = message.removePrefix("/").split("\\s+".toRegex()).filter { it.isNotEmpty() }
+        if (parts.isEmpty()) return
+
+        val root = parts[0].lowercase()
+        if (root != "chunk" && root != "bonfire:chunk") return
+        if (parts.size == 1) return
+
+        val p = event.player
+        val claim = registry.getAt(p.location)
+        val isOwner = claim != null && claim.owner == p.uniqueId
+        val canClaim =
+            claim == null && registry.getOwnedChunks(p.uniqueId) < limits.getLimits(p).maxChunks
+        when (val sub = parts[1].lowercase()) {
+            "claim" -> {
+                if (!canClaim) {
+                    event.isCancelled = true
+                    if (claim != null) {
+                        val ownerName = Bukkit.getOfflinePlayer(claim.owner).name ?: "Unknown"
+                        Dialogs.chunkClaimed(p, ownerName)
+                    } else {
+                        Dialogs.cannotClaim(p)
+                    }
+                }
+            }
+
+            "unclaim", "setrule", "addplayer", "removeplayer" -> {
+                if (!isOwner) {
+                    event.isCancelled = true
+                    if (claim != null) {
+                        val ownerName = Bukkit.getOfflinePlayer(claim.owner).name ?: "Unknown"
+                        Dialogs.chunkClaimed(p, ownerName)
+                    } else {
+                        Dialogs.chunkNotClaimed(p)
+                    }
+                    return
+                }
+
+                when (sub) {
+                    "removeplayer" -> {
+                        val hasTrusted = claim.trustedAlways.isNotEmpty() || claim.trustedOnline.isNotEmpty()
+                        if (parts.size >= 3) {
+                            val targetName = parts[2]
+                            event.isCancelled = true
+                            val target = Dialogs.resolvePlayer(p, targetName) ?: return
+                            val isAdded = claim.trustedAlways.contains(target.uniqueId) || claim.trustedOnline.contains(target.uniqueId)
+                            if (!isAdded) {
+                                Dialogs.playerNotAdded(p, target.name ?: targetName)
+                            } else {
+                                event.isCancelled = false
+                            }
+                        } else if (!hasTrusted) {
+                            event.isCancelled = true
+                            Dialogs.noPlayersAdded(p)
+                        }
+                    }
+
+                    "setrule" -> {
+                        if (parts.size >= 4) {
+                            val rule = parts[2]
+                            val value = parts[3]
+                            val isAlreadySet = when (rule.lowercase()) {
+                                "allowblockbreak" -> value.equals(claim.allowBlockBreak.toString(), true)
+                                "allowblockinteract" -> value.equals(claim.allowBlockInteract.toString(), true)
+                                "allowentityinteract" -> value.equals(claim.allowEntityInteract, true)
+                                else -> false
+                            }
+                            if (isAlreadySet) {
+                                event.isCancelled = true
+                                Dialogs.nothingChanged(p, "that rule is already set to $value.")
+                            }
+                        }
+                    }
+
+                    "addplayer" -> {
+                        if (parts.size >= 3 && parts[2].equals(p.name, true)) {
+                            event.isCancelled = true
+                            Dialogs.nothingChanged(p, "you can't add yourself to your own claim.")
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    /**
+     * Dialog for providing missing value
+     */
     @Suppress("UnstableApiUsage")
     private fun showAddDialog(p: Player, target: String) {
         val dialog = Dialog.create { b ->

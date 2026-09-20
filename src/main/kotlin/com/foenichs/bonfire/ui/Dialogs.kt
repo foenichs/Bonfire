@@ -31,15 +31,38 @@ object Dialogs {
 
     fun chunkClaimed(viewer: Player, ownerName: String) {
         val cropped = ownerName.take(16)
-        viewer.showDialog(overviewDialog(
+        viewer.showDialog(infoDialog(
             Component.text("The chunk you're currently in is claimed by ")
                 .append(msg.head(cropped))
                 .append(Component.text(" $cropped").decorate(TextDecoration.BOLD).append(Component.text(".")))
         ))
     }
 
+    fun chunkNotClaimed(viewer: Player) {
+        viewer.showDialog(errorDialog(
+            Component.text("The chunk you're currently in isn't claimed by anyone.")
+        ))
+    }
+
+    fun playerNotAdded(viewer: Player, name: String) {
+        val cropped = name.take(16)
+        viewer.showDialog(errorDialog(
+            Component.text()
+                .append(Component.text("The player "))
+                .append(msg.head(cropped)).append(Component.space()).append(Component.text(cropped, NamedTextColor.WHITE, TextDecoration.BOLD))
+                .append(Component.text(" isn't added to your claim."))
+                .build()
+        ))
+    }
+
+    fun noPlayersAdded(viewer: Player) {
+        viewer.showDialog(errorDialog(
+            Component.text("There aren't any players that are added to your claim.")
+        ))
+    }
+
     fun cannotClaim(viewer: Player) {
-        viewer.showDialog(overviewDialog(
+        viewer.showDialog(errorDialog(
             Component.text("You can't claim this chunk.")
                 .append(Component.text(" You have either reached your claim limit or you haven't earned any claims yet.", NamedTextColor.GRAY))
         ))
@@ -70,11 +93,11 @@ object Dialogs {
     )
 
     /**
-     * Template used by overview dialogs
+     * Template used by information dialogs
      */
-    private fun overviewDialog(body: Component): Dialog = Dialog.create { b ->
+    private fun infoDialog(body: Component): Dialog = Dialog.create { b ->
         b.empty().base(
-            DialogBase.builder(Component.text("Overview"))
+            DialogBase.builder(Component.text("Just letting you know..."))
                 .body(listOf(DialogBody.plainMessage(body)))
                 .build()
         ).type(

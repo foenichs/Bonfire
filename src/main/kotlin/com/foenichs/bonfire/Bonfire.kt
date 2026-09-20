@@ -82,8 +82,9 @@ class Bonfire : JavaPlugin() {
         val claimService = ClaimService(registry, db, messenger, limitService, visualService, playerListener, mapServices, migrationService, this)
 
         // Register Command Tree
+        val chunkCommand = ChunkCommand(claimService, registry, limitService, messenger)
         lifecycleManager.registerEventHandler(LifecycleEvents.COMMANDS) { event ->
-            ChunkCommand(claimService, registry, limitService, messenger).register(event.registrar())
+            chunkCommand.register(event.registrar())
             BonfireCommand({
                 reloadConfig()
                 limitService.updateConfig(config)
@@ -95,6 +96,7 @@ class Bonfire : JavaPlugin() {
         val pluginManager = Bukkit.getPluginManager()
 
         // General player movement and visuals
+        pluginManager.registerEvents(chunkCommand, this)
         pluginManager.registerEvents(playerListener, this)
 
         // Rule Enforcement
