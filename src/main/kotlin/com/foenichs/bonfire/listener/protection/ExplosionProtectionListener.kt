@@ -4,6 +4,7 @@ import com.foenichs.bonfire.service.ProtectionService
 import com.foenichs.bonfire.storage.ClaimRegistry
 import org.bukkit.entity.Creeper
 import org.bukkit.entity.Player
+import org.bukkit.entity.Projectile
 import org.bukkit.entity.TNTPrimed
 import org.bukkit.event.EventHandler
 import org.bukkit.event.EventPriority
@@ -57,6 +58,12 @@ class ExplosionProtectionListener(
             if (source is Creeper) {
                 if (creeperTarget != null && protection.canBypass(creeperTarget, block.location)) continue
                 if (!claim.allowBlockBreak) iterator.remove()
+                continue
+            }
+
+            // Wind charge thrown by a trusted player bypasses rules
+            val projectileShooter = (source as? Projectile)?.shooter as? Player
+            if (projectileShooter != null && protection.canBypass(projectileShooter, block.location)) {
                 continue
             }
 
