@@ -32,17 +32,18 @@ class ClaimService(
     private val migrationService: MigrationService,
     private val plugin: Bonfire
 ) {
-    data class PendingMerge(val worldUuid: UUID, val chunkKey: Long, val layer: ChunkLayer, val claims: List<Claim>, val time: Long)
-    private val pending = mutableMapOf<UUID, PendingMerge>()
+    data class PendingMerge(val worldUuid: UUID, val chunkKey: Long, val layer: ChunkLayer, val claims: List<Claim>)
+
+    companion object {
+        fun chunkWord(loc: Location, layer: ChunkLayer = ChunkPos.layerFor(loc)) =
+            if (loc.world.environment == World.Environment.NETHER) { if (layer == ChunkLayer.ROOF) "roof chunk" else "ground chunk" } else "chunk"
+    }
 
     fun verifyPermissions(p: Player): Boolean {
         visualService.updateValues(p)
         val claim = registry.getAt(p.location)
         return claim != null && claim.owner == p.uniqueId
     }
-
-    private fun chunkWord(loc: Location, layer: ChunkLayer) =
-        if (loc.world.environment == World.Environment.NETHER) { if (layer == ChunkLayer.ROOF) "roof chunk" else "ground chunk" } else "chunk"
 
     /**
      * Claiming a chunk and either adding it to a claim or creating a new claim
@@ -64,12 +65,13 @@ class ClaimService(
                 finishAction(p, c.owner)
             }
             adj.size > 1 -> {
-                val now = System.currentTimeMillis(); val ex = pending[p.uniqueId]
-                if (ex != null && ex.chunkKey == k && ex.layer == layer && (now - ex.time) <= 15000) { executeMerge(p, ex); pending.remove(p.uniqueId) }
-                else {
-                    pending[p.uniqueId] = PendingMerge(w, k, layer, adj.sortedBy { it.id }, now)
-                    msg.send(p, Component.text().append(Component.text("Claiming this chunk would merge two claims, overriding the settings of the claim that was created later.", NamedTextColor.GRAY))
-                        .append(Component.text(" If you want to merge both claims, run that command again.", NamedTextColor.WHITE)).build())
+                val m = PendingMerge(w, k, layer, adj.sortedBy { it.id })
+                Dialogs.mergeClaims(p) {
+                    if (!p.isOnline) return@mergeClaims
+                    if (registry.getAt(w, k, layer) != null) return@mergeClaims
+                    if (registry.getOwnedChunks(p.uniqueId) >= limits.maxChunks) return@mergeClaims
+                    if (m.claims.any { !registry.getAll().contains(it) }) return@mergeClaims
+                    executeMerge(p, m)
                 }
             }
             else -> {
@@ -104,8 +106,7 @@ class ClaimService(
             msg.send(p, Component.text("Successfully unclaimed this $word and removed it from your claim."))
             finishAction(p, null)
         } else {
-            msg.send(p, Component.text().append(Component.text("You can't unclaim this $word. "))
-                .append(Component.text("Unclaiming it would split up your claim, please unclaim outer chunks first.", NamedTextColor.GRAY)).build())
+            Dialogs.cannotUnclaimSplit(p, word)
         }
     }
 
@@ -113,7 +114,8 @@ class ClaimService(
      * Set a new owner for a claim (OP-only)
      */
     fun adminSetOwner(p: Player, newOwnerName: String) {
-        val claim = registry.getAt(p.location) ?: run { Dialogs.nothingChanged(p, "you aren't inside a claimed chunk."); return }
+        val loc = p.location; val layer = ChunkPos.layerFor(loc); val word = chunkWord(loc, layer)
+        val claim = registry.getAt(loc) ?: run { Dialogs.nothingChanged(p, "you aren't inside a claimed $word."); return }
         val offline = Dialogs.resolvePlayer(p, newOwnerName) ?: return
 
         val oldOwnerId = claim.owner
@@ -150,7 +152,7 @@ class ClaimService(
             msg.send(p, Component.text("Successfully unclaimed this $word as an operator."))
             finishAction(p, null)
         } else {
-            msg.send(p, Component.text("You can't unclaim this $word. Unclaiming it would split up this claim, please unclaim outer chunks first."))
+            Dialogs.cannotUnclaimSplit(p, word)
         }
     }
 
@@ -197,7 +199,7 @@ class ClaimService(
 
         val isAlways = t == "always"
         if ((isAlways && c.trustedAlways.contains(off.uniqueId)) || (!isAlways && c.trustedOnline.contains(off.uniqueId))) {
-            msg.send(p, Component.text().append(Component.text("This player is added already with this type, nothing changed. ")).append(Component.text("To remove players, use the /chunk removeplayer command.", NamedTextColor.GRAY)).build())
+            Dialogs.playerAlreadyAdded(p, n)
             return
         }
 
