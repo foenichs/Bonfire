@@ -50,8 +50,9 @@ class ChunkCommand(
         val node = Commands.literal("chunk").executes { ctx ->
             val p = ctx.source.sender as? Player ?: return@executes 0
             val claim = registry.getAt(p.location)
+            val l = limits.getLimits(p)
             val canClaim =
-                claim == null && registry.getOwnedChunks(p.uniqueId) < limits.getLimits(p).maxChunks
+                claim == null && registry.getOwnedChunks(p.uniqueId) < l.maxChunks && registry.getOwnedClaimsCount(p.uniqueId) < l.maxClaims
 
             if (!canClaim && !isOwner(p)) {
                 if (claim != null) {
@@ -160,8 +161,9 @@ class ChunkCommand(
         val p = event.player
         val claim = registry.getAt(p.location)
         val isOwner = claim != null && claim.owner == p.uniqueId
+        val l = limits.getLimits(p)
         val canClaim =
-            claim == null && registry.getOwnedChunks(p.uniqueId) < limits.getLimits(p).maxChunks
+            claim == null && registry.getOwnedChunks(p.uniqueId) < l.maxChunks && registry.getOwnedClaimsCount(p.uniqueId) < l.maxClaims
         when (val sub = parts[1].lowercase()) {
             "claim" -> {
                 if (!canClaim) {

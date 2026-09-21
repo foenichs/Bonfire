@@ -121,7 +121,8 @@ class VisualService(
         val claim = registry.getAt(player.location)
 
         // Only show claim if in wilderness and under limit
-        val canClaim = claim == null && registry.getOwnedChunks(player.uniqueId) < limits.getLimits(player).maxChunks
+        val l = limits.getLimits(player)
+        val canClaim = claim == null && registry.getOwnedChunks(player.uniqueId) < l.maxChunks && registry.getOwnedClaimsCount(player.uniqueId) < l.maxClaims
 
         // Only show management subcommands for the owner
         val isStrictOwner = claim != null && claim.owner == player.uniqueId
@@ -175,7 +176,7 @@ class VisualService(
      */
     private fun resetAttribute(player: Player, attr: Attribute) {
         val instance = player.getAttribute(attr) ?: return
-        instance.baseValue = instance.defaultValue
+        instance.baseValue = attr.defaultValue
     }
 
     /**
