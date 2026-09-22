@@ -56,7 +56,7 @@ class Bonfire : JavaPlugin() {
         val messenger = Messenger()
         val limitService = LimitService(config, db)
         protectionService = ProtectionService(registry)
-        visualService = VisualService(registry, protectionService, limitService)
+        visualService = VisualService(registry, protectionService, limitService, messenger)
         val migrationService = MigrationService(this, db, registry, protectionService)
 
         // Initialize map integrations (optional)
@@ -75,11 +75,11 @@ class Bonfire : JavaPlugin() {
             squaremapService
         )
 
-        // Initialize Listener first (ClaimService needs it for cache updates)
-        val playerListener = PlayerListener(this, registry, messenger, visualService)
+        // Initialize Listener
+        val playerListener = PlayerListener(this, visualService)
 
         // Initialize Logic Service
-        val claimService = ClaimService(registry, db, messenger, limitService, visualService, playerListener, mapServices, migrationService, this)
+        val claimService = ClaimService(registry, db, messenger, limitService, visualService, mapServices, migrationService, this)
 
         // Register Command Tree
         val chunkCommand = ChunkCommand(claimService, registry, limitService, messenger)

@@ -3,26 +3,18 @@ package com.foenichs.bonfire.listener
 import com.foenichs.bonfire.Bonfire
 import com.foenichs.bonfire.model.ChunkPos
 import com.foenichs.bonfire.service.VisualService
-import com.foenichs.bonfire.storage.ClaimRegistry
-import com.foenichs.bonfire.ui.Messenger
 import org.bukkit.Bukkit
-import org.bukkit.Location
-import org.bukkit.entity.Player
 import org.bukkit.event.EventHandler
 import org.bukkit.event.Listener
 import org.bukkit.event.player.PlayerJoinEvent
 import org.bukkit.event.player.PlayerMoveEvent
 import org.bukkit.event.player.PlayerQuitEvent
 import org.bukkit.event.player.PlayerTeleportEvent
-import java.util.*
 
 class PlayerListener(
     private val plugin: Bonfire,
-    private val registry: ClaimRegistry,
-    private val msg: Messenger,
     private val visualService: VisualService
 ) : Listener {
-    private val lastOwners = mutableMapOf<UUID, UUID?>()
 
     /**
      * Primary handler for player movement
@@ -31,7 +23,7 @@ class PlayerListener(
     fun onMove(event: PlayerMoveEvent) {
         val crossedChunk = event.from.chunk != event.to.chunk
         val crossedLayer = ChunkPos.layerFor(event.from) != ChunkPos.layerFor(event.to)
-        handlePlayerUpdate(event.player, event.to, crossedChunk || crossedLayer)
+        visualService.refresh(event.player, event.to, crossedChunk || crossedLayer)
     }
 
     /**
@@ -39,10 +31,7 @@ class PlayerListener(
      */
     @EventHandler
     fun onTeleport(event: PlayerTeleportEvent) {
-        val p = event.player
-        Bukkit.getScheduler().runTask(plugin, Runnable {
-            handlePlayerUpdate(p, p.location, true)
-        })
+        visualService.refresh(event.player, event.to, true)
     }
 
     /**
@@ -51,9 +40,8 @@ class PlayerListener(
     @EventHandler
     fun onJoin(event: PlayerJoinEvent) {
         val p = event.player
-        // Initialize the player state and notification immediately
-        handlePlayerUpdate(p, p.location, true)
-        refreshAffectedPlayers(p.uniqueId)
+        visualService.refresh(p, p.location)
+        visualService.refreshForOwner(p.uniqueId)
     }
 
     /**
@@ -63,51 +51,8 @@ class PlayerListener(
     fun onQuit(event: PlayerQuitEvent) {
         val p = event.player
         visualService.cleanup(p)
-        lastOwners.remove(p.uniqueId)
-        refreshAffectedPlayers(p.uniqueId)
-    }
-
-    /**
-     * Logic for visual updates and chunk ownership notifications
-     */
-    private fun handlePlayerUpdate(p: Player, loc: Location, chunkChanged: Boolean) {
-        visualService.updateValues(p)
-
-        if (chunkChanged) {
-            val currOwner = registry.getAt(loc)?.owner
-            val lastOwner = lastOwners[p.uniqueId]
-            val hasCache = lastOwners.containsKey(p.uniqueId)
-
-            if (!hasCache || lastOwner != currOwner) {
-                lastOwners[p.uniqueId] = currOwner
-
-                if (currOwner != null) {
-                    msg.actionBar(p, Bukkit.getOfflinePlayer(currOwner).name ?: "Unknown")
-                } else if (hasCache) {
-                    msg.unclaimedBar(p)
-                }
-            }
-        }
-    }
-
-    /**
-     * Updates the cached owner for a specific player manually
-     */
-    fun updateCache(p: Player) {
-        lastOwners[p.uniqueId] = registry.getAt(p.location)?.owner
-    }
-
-    /**
-     * Finds all online players in the specified owner's claims and refreshes them (delay to ensure correct owner status)
-     */
-    private fun refreshAffectedPlayers(ownerId: UUID) {
         Bukkit.getScheduler().runTask(plugin, Runnable {
-            Bukkit.getOnlinePlayers().forEach { onlinePlayer ->
-                val claim = registry.getAt(onlinePlayer.location)
-                if (claim?.owner == ownerId) {
-                    visualService.updateValues(onlinePlayer)
-                }
-            }
+            visualService.refreshForOwner(p.uniqueId)
         })
     }
 }

@@ -1,8 +1,12 @@
 package com.foenichs.bonfire.service
 
+import com.foenichs.bonfire.model.ChunkPos
+import com.foenichs.bonfire.model.Claim
 import com.foenichs.bonfire.storage.ClaimRegistry
+import com.foenichs.bonfire.ui.Messenger
 import org.bukkit.Bukkit
 import org.bukkit.GameMode
+import org.bukkit.Location
 import org.bukkit.attribute.Attribute
 import org.bukkit.entity.Creeper
 import org.bukkit.entity.Mob
@@ -13,8 +17,10 @@ import java.util.*
 class VisualService(
     private val registry: ClaimRegistry,
     private val protection: ProtectionService,
-    private val limits: LimitService
+    private val limits: LimitService,
+    private val msg: Messenger
 ) {
+    private val lastOwners = mutableMapOf<UUID, UUID?>()
     private val lastCommandStates = mutableMapOf<UUID, CommandState>()
     private val entityException = mutableSetOf<UUID>()
 
@@ -40,28 +46,41 @@ class VisualService(
     /**
      * Adds the player to the entity exception set, resetting ENTITY_INTERACTION_RANGE temporarily.
      */
-    fun setEntityException(player: Player) {
+    fun setEntityException(player: Player, location: Location = player.location) {
         entityException.add(player.uniqueId)
-        updateValues(player)
+        refresh(player, location)
     }
 
     /**
      * Removes the player from the entity exception set, restoring the restriction.
      */
-    fun clearEntityException(player: Player) {
+    fun clearEntityException(player: Player, location: Location = player.location) {
         entityException.remove(player.uniqueId)
-        updateValues(player)
+        refresh(player, location)
     }
 
     /**
-     * Updates client-side attributes, gamemodes, and collision states
+     * Refresh a player's attributes, gamemode, collision, command tree, and action bar
      */
-    fun updateValues(player: Player) {
-        val location = player.location
+    fun refresh(player: Player, location: Location = player.location, notifyChunkChange: Boolean = false) {
         val claim = registry.getAt(location)
 
         // Manage dynamic command tree refreshes
-        updateCommandTree(player)
+        updateCommandTree(player, location)
+
+        // Manage action bar notifications
+        val currOwner = claim?.owner
+        val lastOwner = lastOwners[player.uniqueId]
+        val hasCache = lastOwners.containsKey(player.uniqueId)
+
+        if (notifyChunkChange || !hasCache || lastOwner != currOwner) {
+            lastOwners[player.uniqueId] = currOwner
+            if (currOwner != null) {
+                msg.actionBar(player, Bukkit.getOfflinePlayer(currOwner).name ?: "Unknown")
+            } else if (hasCache || notifyChunkChange) {
+                msg.unclaimedBar(player)
+            }
+        }
 
         if (claim == null || protection.canBypass(player, location)) {
             resetPlayer(player)
@@ -111,10 +130,46 @@ class VisualService(
     }
 
     /**
-     * Dynamically refreshes the command tree if state changes
+     * Refreshes all online players within a specific chunk
      */
-    private fun updateCommandTree(player: Player) {
-        val claim = registry.getAt(player.location)
+    fun refreshChunk(pos: ChunkPos) {
+        Bukkit.getOnlinePlayers().forEach { player ->
+            if (ChunkPos.of(player.location) == pos) {
+                refresh(player, player.location, notifyChunkChange = true)
+            }
+        }
+    }
+
+    /**
+     * Refreshes all online players within any chunk of a claim
+     */
+    fun refreshClaim(claim: Claim) {
+        val claimId = claim.id
+        Bukkit.getOnlinePlayers().forEach { player ->
+            val loc = player.location
+            if (registry.getAt(loc)?.id == claimId || claim.chunks.contains(ChunkPos.of(loc))) {
+                refresh(player, loc, notifyChunkChange = true)
+            }
+        }
+    }
+
+    /**
+     * Refreshes all online players in claims associated with an owner
+     */
+    fun refreshForOwner(ownerId: UUID) {
+        Bukkit.getOnlinePlayers().forEach { player ->
+            val claim = registry.getAt(player.location)
+            if (claim != null && (claim.owner == ownerId || claim.trustedOnline.contains(ownerId))) {
+                refresh(player, player.location)
+            }
+        }
+    }
+
+    /**
+     * Refreshes the command tree when player context or claim state changes
+     */
+    private fun updateCommandTree(player: Player, location: Location = player.location) {
+        val claim = registry.getAt(location)
 
         val l = limits.getLimits(player)
         val canClaim = claim == null && registry.getOwnedChunks(player.uniqueId) < l.maxChunks && registry.getOwnedClaimsCount(player.uniqueId) < l.maxClaims
@@ -133,6 +188,7 @@ class VisualService(
      * Cleans up state caches when a player leaves
      */
     fun cleanup(player: Player) {
+        lastOwners.remove(player.uniqueId)
         lastCommandStates.remove(player.uniqueId)
         entityException.remove(player.uniqueId)
     }

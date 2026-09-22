@@ -40,19 +40,19 @@ class EntityProtectionListener(
     @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
     fun onPlayerMove(event: PlayerMoveEvent) {
         val player = event.player
-        val location = player.location
+        val location = event.to
         val claim = registry.getAt(location) ?: run {
-            visualService.clearEntityException(player)
+            visualService.clearEntityException(player, location)
             return
         }
         if (protection.canBypass(player, location)) {
-            visualService.clearEntityException(player)
+            visualService.clearEntityException(player, location)
             return
         }
 
         val allowEntity = claim.allowEntityInteract
         if (allowEntity != "false" && allowEntity != "onlyMounts") {
-            visualService.clearEntityException(player)
+            visualService.clearEntityException(player, location)
             return
         }
 
@@ -67,9 +67,9 @@ class EntityProtectionListener(
         }
 
         if (shouldApply) {
-            visualService.setEntityException(player)
+            visualService.setEntityException(player, location)
         } else {
-            visualService.clearEntityException(player)
+            visualService.clearEntityException(player, location)
         }
     }
 

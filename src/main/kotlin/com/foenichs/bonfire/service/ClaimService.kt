@@ -1,7 +1,6 @@
 package com.foenichs.bonfire.service
 
 import com.foenichs.bonfire.Bonfire
-import com.foenichs.bonfire.listener.PlayerListener
 import com.foenichs.bonfire.model.ChunkLayer
 import com.foenichs.bonfire.model.ChunkPos
 import com.foenichs.bonfire.model.Claim
@@ -27,7 +26,6 @@ class ClaimService(
     private val msg: Messenger,
     private val limits: LimitService,
     private val visualService: VisualService,
-    private val playerListener: PlayerListener,
     private val mapServices: List<ClaimMapService>,
     private val migrationService: MigrationService,
     private val plugin: Bonfire
@@ -40,7 +38,7 @@ class ClaimService(
     }
 
     fun verifyPermissions(p: Player): Boolean {
-        visualService.updateValues(p)
+        visualService.refresh(p)
         val claim = registry.getAt(p.location)
         return claim != null && claim.owner == p.uniqueId
     }
@@ -62,7 +60,7 @@ class ClaimService(
                 migrationService.processChunk(ch)
                 updateClaimMarkers(c)
                 msg.send(p, Component.text("Successfully claimed this $word and added it to your claim."))
-                finishAction(p, c.owner)
+                visualService.refreshChunk(pos)
             }
             adj.size > 1 -> {
                 val m = PendingMerge(w, k, layer, adj.sortedBy { it.id })
@@ -86,7 +84,7 @@ class ClaimService(
                 migrationService.processChunk(ch)
                 updateClaimMarkers(claim)
                 msg.send(p, Component.text("Successfully claimed this $word and created a new claim."))
-                finishAction(p, claim.owner)
+                visualService.refreshChunk(pos)
             }
         }
     }
@@ -104,7 +102,7 @@ class ClaimService(
         } else if (isConnected(c, pos)) {
             handleChunkUnclaim(c, pos)
             msg.send(p, Component.text("Successfully unclaimed this $word and removed it from your claim."))
-            finishAction(p, null)
+            visualService.refreshChunk(pos)
         } else {
             Dialogs.cannotUnclaimSplit(p, word)
         }
@@ -124,8 +122,8 @@ class ClaimService(
         updateClaimMarkers(claim)
 
         msg.send(p, Component.text("Successfully transferred the ownership of this claim to ${offline.name}."))
-        finishActionForClaim(claim)
-        Bukkit.getPlayer(oldOwnerId)?.let { visualService.updateValues(it) }
+        visualService.refreshClaim(claim)
+        Bukkit.getPlayer(oldOwnerId)?.let { visualService.refresh(it) }
     }
 
     /**
@@ -150,7 +148,7 @@ class ClaimService(
         } else if (isConnected(claim, pos)) {
             handleChunkUnclaim(claim, pos)
             msg.send(p, Component.text("Successfully unclaimed this $word as an operator."))
-            finishAction(p, null)
+            visualService.refreshChunk(pos)
         } else {
             Dialogs.cannotUnclaimSplit(p, word)
         }
@@ -185,8 +183,7 @@ class ClaimService(
             else -> ""
         }
         msg.send(p, Component.text().append(Component.text("Set $r to $v. ")).append(Component.text(desc, NamedTextColor.GRAY)).build())
-        visualService.updateValues(p)
-        finishActionForClaim(c)
+        visualService.refreshClaim(c)
     }
 
     /**
@@ -216,8 +213,8 @@ class ClaimService(
             .append(Component.text(" to your claim. "))
             .append(Component.text(desc, NamedTextColor.GRAY)).build())
 
-        finishActionForClaim(c)
-        off.player?.let { visualService.updateValues(it) }
+        visualService.refreshClaim(c)
+        off.player?.let { visualService.refresh(it) }
     }
 
     /**
@@ -232,8 +229,8 @@ class ClaimService(
             msg.send(p, Component.text().append(Component.text("Removed "))
                 .append(msg.head(n)).append(Component.space()).append(Component.text(n, NamedTextColor.WHITE, TextDecoration.BOLD))
                 .append(Component.text(" from your claim.")).build())
-            finishActionForClaim(c)
-            Bukkit.getPlayer(id)?.let { visualService.updateValues(it) }
+            visualService.refreshClaim(c)
+            Bukkit.getPlayer(id)?.let { visualService.refresh(it) }
         }
     }
 
@@ -256,8 +253,8 @@ class ClaimService(
             registry.remove(d); removeClaimMarkers(id, wid)
         }
         updateClaimMarkers(main)
-        msg.send(p, Component.text("Successfully merged your claims.")); finishAction(p, main.owner)
-        finishActionForClaim(main)
+        msg.send(p, Component.text("Successfully merged your claims."))
+        visualService.refreshClaim(main)
     }
 
     private fun handleClaimRemoval(c: Claim) {
@@ -265,7 +262,7 @@ class ClaimService(
         db.deleteClaim(id); registry.remove(c)
         c.chunks.forEach { db.removeFromQueue(it.worldUuid, it.chunkKey) }
         removeClaimMarkers(id, wid)
-        refreshPlayersAfterRemoval(c)
+        visualService.refreshClaim(c)
     }
 
     private fun handleChunkUnclaim(c: Claim, pos: ChunkPos) {
@@ -280,34 +277,6 @@ class ClaimService(
 
     private fun removeClaimMarkers(id: Int, worldId: UUID) {
         mapServices.forEach { it.removeClaim(id, worldId) }
-    }
-
-    private fun refreshPlayersAfterRemoval(c: Claim) {
-        Bukkit.getOnlinePlayers().forEach { online ->
-            if (c.chunks.contains(ChunkPos.of(online.location))) {
-                playerListener.updateCache(online); visualService.updateValues(online)
-                msg.unclaimedBar(online)
-            }
-        }
-    }
-
-    private fun finishAction(p: Player, ownerId: UUID?) {
-        val pos = ChunkPos.of(p.location)
-        Bukkit.getOnlinePlayers().forEach { online ->
-            if (ChunkPos.of(online.location) == pos) {
-                playerListener.updateCache(online); visualService.updateValues(online)
-                if (ownerId != null) msg.actionBar(online, Bukkit.getOfflinePlayer(ownerId).name ?: "Unknown") else msg.unclaimedBar(online)
-            }
-        }
-    }
-
-    private fun finishActionForClaim(c: Claim) {
-        Bukkit.getOnlinePlayers().forEach { online ->
-            if (registry.getAt(online.location)?.id == c.id) {
-                playerListener.updateCache(online); visualService.updateValues(online)
-                msg.actionBar(online, Bukkit.getOfflinePlayer(c.owner).name ?: "Unknown")
-            }
-        }
     }
 
     private fun isConnected(c: Claim, r: ChunkPos): Boolean {
