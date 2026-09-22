@@ -5,6 +5,9 @@ import com.foenichs.bonfire.storage.ClaimRegistry
 import io.papermc.paper.event.block.VaultChangeStateEvent
 import org.bukkit.Bukkit
 import org.bukkit.Material
+import org.bukkit.block.Block
+import org.bukkit.block.BlockFace
+import org.bukkit.block.data.Openable
 import org.bukkit.entity.Item
 import org.bukkit.entity.Player
 import org.bukkit.entity.Projectile
@@ -21,6 +24,8 @@ class InteractProtectionListener(
     private val registry: ClaimRegistry,
     private val protection: ProtectionService
 ) : Listener {
+
+    private val neighborFaces = listOf(BlockFace.UP, BlockFace.DOWN, BlockFace.NORTH, BlockFace.SOUTH, BlockFace.EAST, BlockFace.WEST)
 
     /**
      * Right-clicking blocks or physical pressure triggers
@@ -45,6 +50,17 @@ class InteractProtectionListener(
                 return
             }
 
+            // Prevent interactions that break attached blocks
+            if (
+                event.action == Action.RIGHT_CLICK_BLOCK &&
+                !claim.allowBlockBreak &&
+                wouldBreakNeighbor(block)
+            ) {
+                event.setUseInteractedBlock(Event.Result.DENY)
+                event.isCancelled = true
+                return
+            }
+
             if (!claim.allowBlockInteract) {
                 val itemInHand = event.item
                 if (claim.allowBlockBreak && itemInHand != null && itemInHand.type.isBlock) {
@@ -59,6 +75,26 @@ class InteractProtectionListener(
                 }
             }
         }
+    }
+
+    /**
+     * Checks if toggling an openable block would cause any neighbor to lose support
+     */
+    private fun wouldBreakNeighbor(block: Block): Boolean {
+        val originalData = block.blockData
+        if (originalData !is Openable) return false
+
+        val hasNonEmptyNeighbor = neighborFaces.any { !block.getRelative(it).isEmpty }
+        if (!hasNonEmptyNeighbor) return false
+
+        val testData = (originalData.clone() as Openable).apply { isOpen = !isOpen }
+        block.setBlockData(testData, false)
+        val breaksAny = neighborFaces.any { face ->
+            val neighbor = block.getRelative(face)
+            !neighbor.isEmpty && !neighbor.blockData.isSupported(neighbor)
+        }
+        block.setBlockData(originalData, false)
+        return breaksAny
     }
 
     /**
