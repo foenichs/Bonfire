@@ -62,7 +62,7 @@ class VisualService(
     /**
      * Refresh a player's attributes, gamemode, collision, command tree, and action bar
      */
-    fun refresh(player: Player, location: Location = player.location, notifyChunkChange: Boolean = false) {
+    fun refresh(player: Player, location: Location = player.location, forceActionBar: Boolean = false) {
         val claim = registry.getAt(location)
 
         // Manage dynamic command tree refreshes
@@ -73,11 +73,11 @@ class VisualService(
         val lastOwner = lastOwners[player.uniqueId]
         val hasCache = lastOwners.containsKey(player.uniqueId)
 
-        if (notifyChunkChange || !hasCache || lastOwner != currOwner) {
+        if (forceActionBar || !hasCache || lastOwner != currOwner) {
             lastOwners[player.uniqueId] = currOwner
             if (currOwner != null) {
                 msg.actionBar(player, Bukkit.getOfflinePlayer(currOwner).name ?: "Unknown")
-            } else if (hasCache || notifyChunkChange) {
+            } else if (hasCache) {
                 msg.unclaimedBar(player)
             }
         }
@@ -135,7 +135,7 @@ class VisualService(
     fun refreshChunk(pos: ChunkPos) {
         Bukkit.getOnlinePlayers().forEach { player ->
             if (ChunkPos.of(player.location) == pos) {
-                refresh(player, player.location, notifyChunkChange = true)
+                refresh(player, player.location, forceActionBar = true)
             }
         }
     }
@@ -148,13 +148,13 @@ class VisualService(
         Bukkit.getOnlinePlayers().forEach { player ->
             val loc = player.location
             if (registry.getAt(loc)?.id == claimId || claim.chunks.contains(ChunkPos.of(loc))) {
-                refresh(player, loc, notifyChunkChange = true)
+                refresh(player, loc, forceActionBar = true)
             }
         }
     }
 
     /**
-     * Refreshes all online players in claims associated with an owner
+     * Refreshes all online players in claims associated with an owner (join, quit, trust changes)
      */
     fun refreshForOwner(ownerId: UUID) {
         Bukkit.getOnlinePlayers().forEach { player ->

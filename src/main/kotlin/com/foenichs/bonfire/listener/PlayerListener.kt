@@ -23,7 +23,9 @@ class PlayerListener(
     fun onMove(event: PlayerMoveEvent) {
         val crossedChunk = event.from.chunk != event.to.chunk
         val crossedLayer = ChunkPos.layerFor(event.from) != ChunkPos.layerFor(event.to)
-        visualService.refresh(event.player, event.to, crossedChunk || crossedLayer)
+        if (crossedChunk || crossedLayer) {
+            visualService.refresh(event.player, event.to)
+        }
     }
 
     /**
@@ -31,7 +33,7 @@ class PlayerListener(
      */
     @EventHandler
     fun onTeleport(event: PlayerTeleportEvent) {
-        visualService.refresh(event.player, event.to, true)
+        visualService.refresh(event.player, event.to)
     }
 
     /**
