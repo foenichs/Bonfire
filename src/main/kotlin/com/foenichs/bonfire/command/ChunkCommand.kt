@@ -24,8 +24,6 @@ import org.bukkit.event.EventHandler
 import org.bukkit.event.EventPriority
 import org.bukkit.event.Listener
 import org.bukkit.event.player.PlayerCommandPreprocessEvent
-import org.bukkit.permissions.Permission
-import org.bukkit.permissions.PermissionDefault
 
 class ChunkCommand(
     private val service: ClaimService,
@@ -35,24 +33,10 @@ class ChunkCommand(
 ) : Listener {
 
     fun register(registrar: Commands) {
-        /** Register command permissions to override the default Operator access */
-        val pm = Bukkit.getPluginManager()
-        listOf(
-            "bonfire.command.claim",
-            "bonfire.command.owner",
-            "bonfire.command.removeplayer"
-        ).forEach { node ->
-            if (pm.getPermission(node) == null) {
-                pm.addPermission(Permission(node, PermissionDefault.FALSE))
-            }
-        }
-
         val node = Commands.literal("chunk").executes { ctx ->
             val p = ctx.source.sender as? Player ?: return@executes 0
             val claim = registry.getAt(p.location)
-            val l = limits.getLimits(p)
-            val canClaim =
-                claim == null && registry.getOwnedChunks(p.uniqueId) < l.maxChunks && registry.getOwnedClaimsCount(p.uniqueId) < l.maxClaims
+            val canClaim = canClaim(p)
 
             if (!canClaim && !isOwner(p)) {
                 if (claim != null) {
@@ -65,16 +49,16 @@ class ChunkCommand(
                 ctx.source.sender.sendMessage(Component.text("Usage: /chunk <subcommand>", NamedTextColor.RED))
             }
             1
-        }.then(Commands.literal("claim").requires { it.sender.hasPermission("bonfire.command.claim") }.executes { ctx ->
+        }.then(Commands.literal("claim").requires { (it.sender as? Player)?.let { p -> canClaim(p) } ?: false }.executes { ctx ->
             service.tryClaim(ctx.source.sender as Player); 1
         })
 
-            .then(Commands.literal("unclaim").requires { it.sender.hasPermission("bonfire.command.owner") }.executes { ctx ->
+            .then(Commands.literal("unclaim").requires { (it.sender as? Player)?.let { p -> isOwner(p) } ?: false }.executes { ctx ->
                 service.tryUnclaim(ctx.source.sender as Player); 1
             })
 
             .then(
-                Commands.literal("setrule").requires { it.sender.hasPermission("bonfire.command.owner") }
+                Commands.literal("setrule").requires { (it.sender as? Player)?.let { p -> isOwner(p) } ?: false }
                     .then(booleanRuleNode("allowBlockBreak") { it.allowBlockBreak })
                     .then(booleanRuleNode("allowBlockInteract") { it.allowBlockInteract }).then(
                         Commands.literal("allowEntityInteract")
@@ -90,7 +74,7 @@ class ChunkCommand(
                     )
             )
             .then(
-                Commands.literal("addplayer").requires { it.sender.hasPermission("bonfire.command.owner") }
+                Commands.literal("addplayer").requires { (it.sender as? Player)?.let { p -> isOwner(p) } ?: false }
                     .then(
                         Commands.argument("target", StringArgumentType.word()).suggests { ctx, b ->
                             val p = ctx.source.sender as Player
@@ -121,7 +105,7 @@ class ChunkCommand(
                         })
                     )
             ).then(
-                Commands.literal("removeplayer").requires { it.sender.hasPermission("bonfire.command.removeplayer") }.then(
+                Commands.literal("removeplayer").requires { (it.sender as? Player)?.let { p -> canRemovePlayer(p) } ?: false }.then(
                     Commands.argument("target", StringArgumentType.word()).suggests { ctx, b ->
                         val c = registry.getAt((ctx.source.sender as Player).location)
                         val input = b.remaining.lowercase()
@@ -160,13 +144,9 @@ class ChunkCommand(
 
         val p = event.player
         val claim = registry.getAt(p.location)
-        val isOwner = claim != null && claim.owner == p.uniqueId
-        val l = limits.getLimits(p)
-        val canClaim =
-            claim == null && registry.getOwnedChunks(p.uniqueId) < l.maxChunks && registry.getOwnedClaimsCount(p.uniqueId) < l.maxClaims
         when (val sub = parts[1].lowercase()) {
             "claim" -> {
-                if (!canClaim) {
+                if (!canClaim(p)) {
                     event.isCancelled = true
                     if (claim != null) {
                         val ownerName = Bukkit.getOfflinePlayer(claim.owner).name ?: "Unknown"
@@ -178,7 +158,7 @@ class ChunkCommand(
             }
 
             "unclaim", "setrule", "addplayer", "removeplayer" -> {
-                if (!isOwner) {
+                if (claim == null || claim.owner != p.uniqueId) {
                     event.isCancelled = true
                     if (claim != null) {
                         val ownerName = Bukkit.getOfflinePlayer(claim.owner).name ?: "Unknown"
@@ -274,6 +254,17 @@ class ChunkCommand(
             })
 
     private fun isOwner(p: Player?) = p?.let { registry.getAt(it.location)?.owner == it.uniqueId } ?: false
+
+    private fun canRemovePlayer(p: Player?) = p?.let {
+        val claim = registry.getAt(it.location)
+        claim != null && claim.owner == it.uniqueId && (claim.trustedAlways.isNotEmpty() || claim.trustedOnline.isNotEmpty())
+    } ?: false
+
+    private fun canClaim(p: Player): Boolean {
+        val claim = registry.getAt(p.location)
+        val l = limits.getLimits(p)
+        return claim == null && registry.getOwnedChunks(p.uniqueId) < l.maxChunks && registry.getOwnedClaimsCount(p.uniqueId) < l.maxClaims
+    }
 
     /**
      * Validation for profile names

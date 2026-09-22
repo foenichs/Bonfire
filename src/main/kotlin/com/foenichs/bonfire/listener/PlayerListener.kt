@@ -62,7 +62,7 @@ class PlayerListener(
     @EventHandler
     fun onQuit(event: PlayerQuitEvent) {
         val p = event.player
-        visualService.removeAttachment(p)
+        visualService.cleanup(p)
         lastOwners.remove(p.uniqueId)
         refreshAffectedPlayers(p.uniqueId)
     }

@@ -56,7 +56,7 @@ class Bonfire : JavaPlugin() {
         val messenger = Messenger()
         val limitService = LimitService(config, db)
         protectionService = ProtectionService(registry)
-        visualService = VisualService(this, registry, protectionService, limitService)
+        visualService = VisualService(registry, protectionService, limitService)
         val migrationService = MigrationService(this, db, registry, protectionService)
 
         // Initialize map integrations (optional)
