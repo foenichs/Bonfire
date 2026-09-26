@@ -56,7 +56,8 @@ class Bonfire : JavaPlugin() {
         val messenger = Messenger()
         val limitService = LimitService(config, db)
         protectionService = ProtectionService(registry)
-        visualService = VisualService(registry, protectionService, limitService, messenger)
+        val escapeService = EscapeService(registry, protectionService, messenger, this)
+        visualService = VisualService(registry, protectionService, limitService, messenger, escapeService)
         val migrationService = MigrationService(this, db, registry, protectionService)
 
         // Initialize map integrations (optional)
@@ -82,7 +83,7 @@ class Bonfire : JavaPlugin() {
         val claimService = ClaimService(registry, db, messenger, limitService, visualService, mapServices, migrationService, this)
 
         // Register Command Tree
-        val chunkCommand = ChunkCommand(claimService, registry, limitService, messenger)
+        val chunkCommand = ChunkCommand(claimService, registry, limitService, messenger, escapeService)
         lifecycleManager.registerEventHandler(LifecycleEvents.COMMANDS) { event ->
             chunkCommand.register(event.registrar())
             BonfireCommand({

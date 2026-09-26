@@ -4,7 +4,7 @@ default-rules:
   allowBlockInteract: false
   allowEntityInteract: false
 
-# Claiming Limits Configuration
+# Claiming Limits Configs
 limits:
   # If set to false, claiming isn't limited at all
   enabled: true
@@ -21,6 +21,13 @@ limits:
   maximum:
     chunks: -1
     claims: 5
+
+# Configs for the /chunk escape command
+escaping:
+  # Whether the command is visible and can be used
+  enabled: true
+  # How many seconds a player has to wait between uses
+  cooldown: 1800
 
 # Configs for BlueMap claim markers, if BlueMap is installed
 bluemap:
@@ -55,3 +62,5 @@ squaremap:
   # Ordering relative to other squaremap layers
   layer-priority: 50
   z-index: 50
+
+# Use /bonfire reloadConfig to apply your changes without restarting

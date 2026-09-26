@@ -118,6 +118,44 @@ object Dialogs {
         viewer.showDialog(errorDialog(Component.text("Nothing changed, as $reason")))
     }
 
+    fun escapeConfirm(viewer: Player, cooldownText: String, onConfirm: () -> Unit) {
+        val dialog = Dialog.create { b ->
+            b.empty().base(
+                DialogBase.builder(Component.text("Just letting you know..."))
+                    .body(listOf(DialogBody.plainMessage(
+                        Component.text("This should only be used if you're stuck, as you won't be able to use it again for $cooldownText.")
+                    )))
+                    .build()
+            ).type(
+                DialogType.multiAction(listOf(
+                    ActionButton.create(Component.text("Cancel"), null, 75, DialogAction.customClick({ _, _ -> }, ClickCallback.Options.builder().uses(1).build())),
+                    ActionButton.create(Component.text("Escape"), null, 75, DialogAction.customClick({ _, _ ->
+                        onConfirm()
+                    }, ClickCallback.Options.builder().uses(1).build()))
+                )).build()
+            )
+        }
+        viewer.showDialog(dialog)
+    }
+
+    fun escapeOnCooldown(viewer: Player, remaining: String) {
+        viewer.showDialog(errorDialog(
+            Component.text("You're currently on cooldown.")
+                .append(Component.text(" You'll be able to escape again in $remaining.", NamedTextColor.GRAY))
+        ))
+    }
+
+    fun escapeFailed(viewer: Player) {
+        viewer.showDialog(errorDialog(
+            Component.text("Couldn't find anywhere safe nearby to escape to. If you're stuck, please contact a server operator.")
+        ))
+    }
+
+    fun escapingDisabled(viewer: Player) {
+        viewer.showDialog(errorDialog(Component.text("Escaping is disabled on this server.")
+            .append(Component.text(" If you're stuck in a claim, please contact a server operator.", NamedTextColor.GRAY))))
+    }
+
     fun playerHasNoClaims(viewer: Player, name: String) {
         val cropped = name.take(16)
         viewer.showDialog(errorDialog(

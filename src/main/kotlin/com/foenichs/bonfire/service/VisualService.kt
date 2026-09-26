@@ -18,7 +18,8 @@ class VisualService(
     private val registry: ClaimRegistry,
     private val protection: ProtectionService,
     private val limits: LimitService,
-    private val msg: Messenger
+    private val msg: Messenger,
+    private val escape: EscapeService
 ) {
     private val lastOwners = mutableMapOf<UUID, UUID?>()
     private val lastCommandStates = mutableMapOf<UUID, CommandState>()
@@ -27,7 +28,7 @@ class VisualService(
     /**
      * Data classes to track states for command tree refreshing
      */
-    private data class CommandState(val canClaim: Boolean, val isOwner: Boolean, val canRemove: Boolean, val rules: RuleState?)
+    private data class CommandState(val canClaim: Boolean, val canEscape: Boolean, val isOwner: Boolean, val canRemove: Boolean, val rules: RuleState?)
     private data class RuleState(val allowBreak: Boolean, val allowInteract: Boolean, val allowEntity: String)
 
     /**
@@ -173,11 +174,12 @@ class VisualService(
 
         val l = limits.getLimits(player)
         val canClaim = claim == null && registry.getOwnedChunks(player.uniqueId) < l.maxChunks && registry.getOwnedClaimsCount(player.uniqueId) < l.maxClaims
+        val canEscape = escape.isRestricted(player, location)
         val isStrictOwner = claim != null && claim.owner == player.uniqueId
         val canRemove = claim != null && isStrictOwner && (claim.trustedAlways.isNotEmpty() || claim.trustedOnline.isNotEmpty())
         val currentRules = claim?.let { RuleState(it.allowBlockBreak, it.allowBlockInteract, it.allowEntityInteract) }
 
-        val currentState = CommandState(canClaim, isStrictOwner, canRemove, currentRules)
+        val currentState = CommandState(canClaim, canEscape, isStrictOwner, canRemove, currentRules)
         if (lastCommandStates[player.uniqueId] != currentState) {
             lastCommandStates[player.uniqueId] = currentState
             player.updateCommands()

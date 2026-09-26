@@ -2,6 +2,7 @@ package com.foenichs.bonfire.command
 
 import com.foenichs.bonfire.model.Claim
 import com.foenichs.bonfire.service.ClaimService
+import com.foenichs.bonfire.service.EscapeService
 import com.foenichs.bonfire.service.LimitService
 import com.foenichs.bonfire.storage.ClaimRegistry
 import com.foenichs.bonfire.ui.Dialogs
@@ -29,7 +30,8 @@ class ChunkCommand(
     private val service: ClaimService,
     private val registry: ClaimRegistry,
     private val limits: LimitService,
-    private val msg: Messenger
+    private val msg: Messenger,
+    private val escape: EscapeService
 ) : Listener {
 
     fun register(registrar: Commands) {
@@ -55,6 +57,10 @@ class ChunkCommand(
 
             .then(Commands.literal("unclaim").requires { (it.sender as? Player)?.let { p -> isOwner(p) } ?: false }.executes { ctx ->
                 service.tryUnclaim(ctx.source.sender as Player); 1
+            })
+
+            .then(Commands.literal("escape").requires { (it.sender as? Player)?.let { p -> escape.isRestricted(p) } ?: false }.executes { ctx ->
+                escape.promptEscape(ctx.source.sender as Player); 1
             })
 
             .then(
@@ -154,6 +160,13 @@ class ChunkCommand(
                     } else {
                         Dialogs.cannotClaim(p)
                     }
+                }
+            }
+
+            "escape" -> {
+                if (!escape.isRestricted(p)) {
+                    event.isCancelled = true
+                    if (!escape.isEnabled()) Dialogs.escapingDisabled(p) else Dialogs.chunkNotClaimed(p)
                 }
             }
 
