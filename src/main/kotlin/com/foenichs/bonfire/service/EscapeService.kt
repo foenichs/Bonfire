@@ -40,7 +40,7 @@ class EscapeService(
         if (!isEnabled()) return false
         val claim = registry.getAt(location) ?: return false
         if (protection.canBypass(p, location)) return false
-        return !claim.allowBlockBreak || claim.allowEntityInteract != "true"
+        return claim.blockActions != "always" || claim.entityActions != "always"
     }
 
     /**

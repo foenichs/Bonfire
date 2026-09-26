@@ -25,7 +25,7 @@ class BlockProtectionListener(
     private fun isActionBlocked(player: Player, location: Location): Boolean {
         if (protection.canBypass(player, location)) return false
         val claim = registry.getAt(location) ?: return false
-        return !claim.allowBlockBreak
+        return claim.blockActions != "always"
     }
 
     /**
@@ -79,12 +79,12 @@ class BlockProtectionListener(
 
         if (shooter != null && protection.canBypass(shooter, block.location)) return
 
-        if (!claim.allowBlockInteract) {
+        if (claim.blockActions == "never") {
             event.isCancelled = true
             return
         }
 
-        if (block.type == Material.DECORATED_POT && !claim.allowBlockBreak) {
+        if (block.type == Material.DECORATED_POT && claim.blockActions != "always") {
             event.isCancelled = true
         }
     }

@@ -29,7 +29,7 @@ class VisualService(
      * Data classes to track states for command tree refreshing
      */
     private data class CommandState(val canClaim: Boolean, val canEscape: Boolean, val isOwner: Boolean, val canRemove: Boolean, val rules: RuleState?)
-    private data class RuleState(val allowBreak: Boolean, val allowInteract: Boolean, val allowEntity: String)
+    private data class RuleState(val blockActions: String, val entityActions: String)
 
     /**
      * Lazy-initialized team to disable physical collision via scoreboard
@@ -89,10 +89,10 @@ class VisualService(
         }
 
         // Apply block interaction logic
-        if (!claim.allowBlockBreak && claim.allowBlockInteract) {
+        if (claim.blockActions == "interactOnly") {
             if (player.gameMode != GameMode.ADVENTURE) player.gameMode = GameMode.ADVENTURE
             resetAttribute(player, Attribute.BLOCK_INTERACTION_RANGE)
-        } else if (!claim.allowBlockBreak) {
+        } else if (claim.blockActions == "never") {
             if (player.gameMode == GameMode.ADVENTURE) player.gameMode = GameMode.SURVIVAL
             player.getAttribute(Attribute.BLOCK_INTERACTION_RANGE)?.baseValue = 0.0
         } else {
@@ -101,9 +101,9 @@ class VisualService(
         }
 
         // Apply entity interaction logic respecting entityException
-        val entityRule = claim.allowEntityInteract
+        val entityRule = claim.entityActions
         when (entityRule) {
-            "false" -> {
+            "never" -> {
                 dropNearbyAggro(player)
                 if (entityException.contains(player.uniqueId)) {
                     resetAttribute(player, Attribute.ENTITY_INTERACTION_RANGE)
@@ -113,13 +113,9 @@ class VisualService(
                 if (!noCollideTeam.hasEntry(player.name)) noCollideTeam.addEntry(player.name)
             }
 
-            "onlyMounts" -> {
+            "interactOnly" -> {
                 dropNearbyAggro(player)
-                if (entityException.contains(player.uniqueId)) {
-                    resetAttribute(player, Attribute.ENTITY_INTERACTION_RANGE)
-                } else {
-                    player.getAttribute(Attribute.ENTITY_INTERACTION_RANGE)?.baseValue = 0.0
-                }
+                resetAttribute(player, Attribute.ENTITY_INTERACTION_RANGE)
                 if (!noCollideTeam.hasEntry(player.name)) noCollideTeam.addEntry(player.name)
             }
 
@@ -177,7 +173,7 @@ class VisualService(
         val canEscape = escape.isRestricted(player, location)
         val isStrictOwner = claim != null && claim.owner == player.uniqueId
         val canRemove = claim != null && isStrictOwner && (claim.trustedAlways.isNotEmpty() || claim.trustedOnline.isNotEmpty())
-        val currentRules = claim?.let { RuleState(it.allowBlockBreak, it.allowBlockInteract, it.allowEntityInteract) }
+        val currentRules = claim?.let { RuleState(it.blockActions, it.entityActions) }
 
         val currentState = CommandState(canClaim, canEscape, isStrictOwner, canRemove, currentRules)
         if (lastCommandStates[player.uniqueId] != currentState) {

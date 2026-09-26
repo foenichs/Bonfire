@@ -65,19 +65,8 @@ class ChunkCommand(
 
             .then(
                 Commands.literal("setrule").requires { (it.sender as? Player)?.let { p -> isOwner(p) } ?: false }
-                    .then(booleanRuleNode("allowBlockBreak") { it.allowBlockBreak })
-                    .then(booleanRuleNode("allowBlockInteract") { it.allowBlockInteract }).then(
-                        Commands.literal("allowEntityInteract")
-                            .then(Commands.literal("true").requires { (it.sender as? Player)?.let { p -> registry.getAt(p.location)?.allowEntityInteract != "true" } ?: true }.executes { ctx ->
-                                service.setRule(ctx.source.sender as Player, "allowEntityInteract", "true"); 1
-                            })
-                            .then(Commands.literal("false").requires { (it.sender as? Player)?.let { p -> registry.getAt(p.location)?.allowEntityInteract != "false" } ?: true }.executes { ctx ->
-                                service.setRule(ctx.source.sender as Player, "allowEntityInteract", "false"); 1
-                            })
-                            .then(Commands.literal("onlyMounts").requires { (it.sender as? Player)?.let { p -> registry.getAt(p.location)?.allowEntityInteract != "onlyMounts" } ?: true }.executes { ctx ->
-                                service.setRule(ctx.source.sender as Player, "allowEntityInteract", "onlyMounts"); 1
-                            })
-                    )
+                    .then(ruleNode("blockActions") { it.blockActions })
+                    .then(ruleNode("entityActions") { it.entityActions })
             )
             .then(
                 Commands.literal("addplayer").requires { (it.sender as? Player)?.let { p -> isOwner(p) } ?: false }
@@ -206,9 +195,8 @@ class ChunkCommand(
                             val rule = parts[2]
                             val value = parts[3]
                             val isAlreadySet = when (rule.lowercase()) {
-                                "allowblockbreak" -> value.equals(claim.allowBlockBreak.toString(), true)
-                                "allowblockinteract" -> value.equals(claim.allowBlockInteract.toString(), true)
-                                "allowentityinteract" -> value.equals(claim.allowEntityInteract, true)
+                                "blockactions" -> value.equals(claim.blockActions, true)
+                                "entityactions" -> value.equals(claim.entityActions, true)
                                 else -> false
                             }
                             if (isAlreadySet) {
@@ -255,15 +243,18 @@ class ChunkCommand(
     }
 
     /**
-     * Boolean rule suggestions and execution
+     * Rule node suggestions and execution for three-state rules
      */
-    private fun booleanRuleNode(name: String, property: (Claim) -> Boolean) =
+    private fun ruleNode(name: String, property: (Claim) -> String) =
         Commands.literal(name)
-            .then(Commands.literal("true").requires { (it.sender as? Player)?.let { p -> registry.getAt(p.location)?.let { c -> !property(c) } } ?: true }.executes { ctx ->
-                service.setRule(ctx.source.sender as Player, name, "true"); 1
+            .then(Commands.literal("always").requires { (it.sender as? Player)?.let { p -> registry.getAt(p.location)?.let { c -> property(c) != "always" } } ?: true }.executes { ctx ->
+                service.setRule(ctx.source.sender as Player, name, "always"); 1
             })
-            .then(Commands.literal("false").requires { (it.sender as? Player)?.let { p -> registry.getAt(p.location)?.let { c -> property(c) } } ?: true }.executes { ctx ->
-                service.setRule(ctx.source.sender as Player, name, "false"); 1
+            .then(Commands.literal("interactOnly").requires { (it.sender as? Player)?.let { p -> registry.getAt(p.location)?.let { c -> property(c) != "interactOnly" } } ?: true }.executes { ctx ->
+                service.setRule(ctx.source.sender as Player, name, "interactOnly"); 1
+            })
+            .then(Commands.literal("never").requires { (it.sender as? Player)?.let { p -> registry.getAt(p.location)?.let { c -> property(c) != "never" } } ?: true }.executes { ctx ->
+                service.setRule(ctx.source.sender as Player, name, "never"); 1
             })
 
     private fun isOwner(p: Player?) = p?.let { registry.getAt(it.location)?.owner == it.uniqueId } ?: false

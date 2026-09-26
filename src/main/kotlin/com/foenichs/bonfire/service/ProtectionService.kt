@@ -78,6 +78,6 @@ class ProtectionService(private val registry: ClaimRegistry) {
      */
     fun checkAllowBlockBreak(targetLocation: Location): Boolean {
         val claim = registry.getAt(targetLocation) ?: return true
-        return claim.allowBlockBreak
+        return claim.blockActions == "always"
     }
 }

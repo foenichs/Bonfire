@@ -23,6 +23,38 @@ class MigrationService(
 
     private val requiredDataVersion = "1.6.0"
 
+    companion object {
+        /**
+         * Migrates database schema for new claim layers and rules
+         */
+        fun migrateDatabase(db: DatabaseManager) {
+            val conn = db.connection
+            val s = conn.createStatement()
+            val columns = mutableSetOf<String>()
+            conn.metaData.getColumns(null, null, "claims", null).use { rs ->
+                while (rs.next()) columns.add(rs.getString("COLUMN_NAME").lowercase())
+            }
+
+            if (columns.isNotEmpty() && !columns.contains("block_actions")) {
+                s.execute("ALTER TABLE claims ADD COLUMN block_actions TEXT DEFAULT 'never'")
+                if (columns.contains("allow_block_break")) {
+                    s.execute("UPDATE claims SET block_actions = CASE WHEN allow_block_break = 1 THEN 'always' WHEN allow_block_interact = 1 THEN 'interactOnly' ELSE 'never' END")
+                }
+            }
+            if (columns.isNotEmpty() && !columns.contains("entity_actions")) {
+                s.execute("ALTER TABLE claims ADD COLUMN entity_actions TEXT DEFAULT 'never'")
+                if (columns.contains("allow_entity_interact")) {
+                    s.execute("UPDATE claims SET entity_actions = CASE WHEN allow_entity_interact = 'true' THEN 'always' WHEN allow_entity_interact = 'onlyMounts' THEN 'interactOnly' ELSE 'never' END")
+                }
+            }
+
+            val hasLayerColumn = conn.metaData.getColumns(null, null, "claim_chunks", "layer").use { it.next() }
+            if (!hasLayerColumn) {
+                s.execute("ALTER TABLE claim_chunks ADD COLUMN layer TEXT NOT NULL DEFAULT 'GROUND'")
+            }
+        }
+    }
+
     init {
         val currentVersion = db.getMetadata("data_version")
         val isFresh = registry.getAll().isEmpty()
@@ -30,6 +62,7 @@ class MigrationService(
         if (isFresh) {
             db.setMetadata("data_version", requiredDataVersion)
         } else if (currentVersion == null || isNewerThan(currentVersion)) {
+            migrateDatabase(db)
             db.fillMigrationQueue()
             mergeNetherRoofClaims()
             db.setMetadata("data_version", requiredDataVersion)
@@ -105,8 +138,10 @@ class MigrationService(
      * Checks if the required version is newer than the current database version
      */
     private fun isNewerThan(current: String): Boolean {
-        val req = requiredDataVersion.split(".").map { it.toIntOrNull() ?: 0 }
-        val curr = current.split(".").map { it.toIntOrNull() ?: 0 }
+        val numRegex = "\\d+".toRegex()
+        val req = numRegex.findAll(requiredDataVersion).map { it.value.toInt() }.toList()
+        val curr = numRegex.findAll(current).map { it.value.toInt() }.toList()
+
         for (i in 0 until maxOf(req.size, curr.size)) {
             val n1 = req.getOrElse(i) { 0 }
             val n2 = curr.getOrElse(i) { 0 }

@@ -37,7 +37,7 @@ class WorldProtectionListener(
                     val location = entity.location
                     val claim = registry.getAt(location) ?: return@forEach
 
-                    if (!claim.allowBlockBreak && !protection.isOrigin(entity, location)) {
+                    if (claim.blockActions != "always" && !protection.isOrigin(entity, location)) {
                         entity.world.dropItemNaturally(entity.location, ItemStack(entity.blockData.material))
                         entity.remove()
                     }
@@ -59,7 +59,7 @@ class WorldProtectionListener(
         if (from.chunk == to.chunk && ChunkPos.layerFor(from) == ChunkPos.layerFor(to)) return
 
         val claim = registry.getAt(to) ?: return
-        if (claim.allowEntityInteract != "true" && !protection.isOrigin(vehicle, to)) {
+        if (claim.entityActions != "always" && !protection.isOrigin(vehicle, to)) {
             val material = when (vehicle) {
                 is Boat -> vehicle.boatMaterial
                 is Minecart -> Material.MINECART
@@ -206,7 +206,7 @@ class WorldProtectionListener(
         val location = event.block.location
         val claim = registry.getAt(location) ?: return
 
-        if (!claim.allowBlockBreak) {
+        if (claim.blockActions != "always") {
             when (entity) {
                 is Player -> {
                     if (!protection.canBypass(entity, location)) {
@@ -237,7 +237,7 @@ class WorldProtectionListener(
         val location = event.block.location
         val claim = registry.getAt(location) ?: return
 
-        if (!claim.allowBlockBreak && !protection.isOrigin(entity, location)) {
+        if (claim.blockActions != "always" && !protection.isOrigin(entity, location)) {
             event.isCancelled = true
             entity.world.dropItemNaturally(entity.location, ItemStack(entity.blockData.material))
             entity.remove()
@@ -253,10 +253,7 @@ class WorldProtectionListener(
         val location = player.location
         val claim = registry.getAt(location) ?: return
 
-        if (
-            claim.allowEntityInteract == "false" ||
-            claim.allowEntityInteract == "onlyMounts"
-        ) {
+        if (claim.entityActions != "always") {
             if (!protection.canBypass(player, location)) {
                 event.isCancelled = true
             }
@@ -272,10 +269,7 @@ class WorldProtectionListener(
         val location = player.location
         val claim = registry.getAt(location) ?: return
 
-        if (
-            claim.allowEntityInteract == "false" ||
-            claim.allowEntityInteract == "onlyMounts"
-        ) {
+        if (claim.entityActions != "always") {
             if (!protection.canBypass(player, location)) {
                 event.isCancelled = true
             }

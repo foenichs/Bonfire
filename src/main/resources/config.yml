@@ -1,8 +1,7 @@
 # Default rules for newly created claims
 default-rules:
-  allowBlockBreak: false
-  allowBlockInteract: false
-  allowEntityInteract: false
+  blockActions: never
+  entityActions: interactOnly
 
 # Claiming Limits Configs
 limits:

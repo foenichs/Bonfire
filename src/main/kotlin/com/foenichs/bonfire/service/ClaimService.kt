@@ -75,11 +75,10 @@ class ClaimService(
             else -> {
                 if (registry.getOwnedClaimsCount(p.uniqueId) >= limits.maxClaims) return
                 val id = db.createClaim(p.uniqueId); val pos = ChunkPos(w, k, layer)
-                val defBreak = plugin.config.getBoolean("default-rules.allowBlockBreak", false)
-                val defInteract = plugin.config.getBoolean("default-rules.allowBlockInteract", false)
-                val defEntity = plugin.config.getString("default-rules.allowEntityInteract", "false")!!
+                val defBlock = plugin.config.getString("default-rules.blockActions", "never")!!
+                val defEntity = plugin.config.getString("default-rules.entityActions", "never")!!
 
-                val claim = Claim(id, p.uniqueId, mutableSetOf(pos), defBreak, defInteract, defEntity)
+                val claim = Claim(id, p.uniqueId, mutableSetOf(pos), defBlock, defEntity)
                 registry.add(claim); db.addChunk(id, pos); db.updateRules(claim)
                 migrationService.processChunk(ch)
                 updateClaimMarkers(claim)
@@ -173,14 +172,24 @@ class ClaimService(
     fun setRule(p: Player, r: String, v: String) {
         if (!verifyPermissions(p)) return
         val c = registry.getAt(p.location) ?: return
-        if (r == "allowEntityInteract" && v != "true" && v != "false" && v != "onlyMounts") return
-        when(r) { "allowBlockBreak" -> c.allowBlockBreak = v.toBoolean(); "allowBlockInteract" -> c.allowBlockInteract = v.toBoolean(); "allowEntityInteract" -> c.allowEntityInteract = v }
+        if (v != "always" && v != "interactOnly" && v != "never") return
+        when (r) {
+            "blockActions" -> c.blockActions = v
+            "entityActions" -> c.entityActions = v
+            else -> return
+        }
         db.updateRules(c)
         val desc = when (r) {
-            "allowBlockBreak" -> if (v == "true") "Blocks on your claim can now be placed and destroyed by players, pistons, water, etc." else "Blocks on your claim can no longer be placed and destroyed by players, pistons, water, etc."
-            "allowBlockInteract" -> if (v == "true") "Players can now interact with blocks on your claim." else "Players can no longer interact with blocks on your claim."
-            "allowEntityInteract" -> when (v) { "true" -> "Players can now interact and collide with entites and get targetted by them."; "false" -> "Players can no longer interact and collide with entites or get targetted by them."; "onlyMounts" -> "Players can mount entites, but can't interact and collide with or get targetted by them."; else -> "" }
-            else -> ""
+            "blockActions" -> when (v) {
+                "always" -> "Players can now break, place, and interact with blocks on your claim."
+                "interactOnly" -> "Players can now interact with blocks on your claim, but can't place or break them."
+                else -> "Players can no longer place, break, or interact with blocks on your claim."
+            }
+            else -> when (v) {
+                "always" -> "Players can now interact, mount, trade, collide with, and damage entities."
+                "interactOnly" -> "Players can now interact, mount, and trade with entities, but can't damage them."
+                else -> "Players can no longer interact with, mount, trade with, collide with, or damage entities."
+            }
         }
         msg.send(p, Component.text().append(Component.text("Set $r to $v. ")).append(Component.text(desc, NamedTextColor.GRAY)).build())
         visualService.refreshClaim(c)

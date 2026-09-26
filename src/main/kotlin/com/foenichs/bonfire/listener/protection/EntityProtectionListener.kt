@@ -50,23 +50,16 @@ class EntityProtectionListener(
             return
         }
 
-        val allowEntity = claim.allowEntityInteract
-        if (allowEntity != "false" && allowEntity != "onlyMounts") {
+        val allowEntity = claim.entityActions
+        if (allowEntity != "never") {
             visualService.clearEntityException(player, location)
             return
         }
 
         val target = player.getTargetEntity(5)
         val isPet = target != null && protection.ownsEntity(player, target)
-        val isMountOrVehicle = target is Vehicle || target is Steerable
 
-        val shouldApply = when (allowEntity) {
-            "false" -> isPet
-            "onlyMounts" -> isPet || isMountOrVehicle
-            else -> false
-        }
-
-        if (shouldApply) {
+        if (isPet) {
             visualService.setEntityException(player, location)
         } else {
             visualService.clearEntityException(player, location)
@@ -84,7 +77,7 @@ class EntityProtectionListener(
         if (protection.canBypass(target, target.location)) return
 
         val claim = registry.getAt(target.location) ?: return
-        if (claim.allowEntityInteract == "false" || claim.allowEntityInteract == "onlyMounts") {
+        if (claim.entityActions != "always") {
             event.target = null
             event.isCancelled = true
         }
@@ -128,7 +121,7 @@ class EntityProtectionListener(
         if (damager == null && victim is Player && protection.canBypass(victim, victimLocation)) return
 
         // Enforcement for unauthorized actors
-        if (claim.allowEntityInteract == "false" || claim.allowEntityInteract == "onlyMounts") {
+        if (claim.entityActions != "always") {
 
             // Allow if a player is interacting with entities they own
             if (damager != null && protection.ownsEntity(damager, victim)) return
@@ -165,7 +158,7 @@ class EntityProtectionListener(
         // Only authorized players can be knocked back
         if (damager == null && victim is Player && protection.canBypass(victim, victimLocation)) return
 
-        if (claim.allowEntityInteract == "false" || claim.allowEntityInteract == "onlyMounts") {
+        if (claim.entityActions != "always") {
             // Allow if the damager owns the victim
             if (damager != null && protection.ownsEntity(damager, victim)) return
 
@@ -192,12 +185,8 @@ class EntityProtectionListener(
         if (protection.canBypass(player, entity.location)) return
 
         val claim = registry.getAt(entity.location) ?: return
-        if (claim.allowEntityInteract == "false") {
+        if (claim.entityActions == "never") {
             event.isCancelled = true
-        } else if (claim.allowEntityInteract == "onlyMounts") {
-            if (entity !is Vehicle && entity !is Steerable) {
-                event.isCancelled = true
-            }
         }
     }
 
@@ -212,7 +201,7 @@ class EntityProtectionListener(
         if (protection.canBypass(player, location)) return
 
         val claim = registry.getAt(location) ?: return
-        if (claim.allowEntityInteract == "false" || claim.allowEntityInteract == "onlyMounts") {
+        if (claim.entityActions != "always") {
             event.isCancelled = true
         }
     }
@@ -250,7 +239,7 @@ class EntityProtectionListener(
         }
         if (player != null && protection.canBypass(player, location)) return false
         val claim = registry.getAt(location) ?: return false
-        return claim.allowEntityInteract == "false" || claim.allowEntityInteract == "onlyMounts"
+        return claim.entityActions != "always"
     }
 
     /**
@@ -265,7 +254,7 @@ class EntityProtectionListener(
 
         if (protection.canBypass(player, location)) return
 
-        if (claim.allowEntityInteract != "true") {
+        if (claim.entityActions != "always") {
             if (!protection.isOrigin(vehicle, location)) {
                 val material = when (vehicle) {
                     is Boat -> vehicle.boatMaterial
@@ -293,10 +282,7 @@ class EntityProtectionListener(
         val location = event.egg.location
         val claim = registry.getAt(location) ?: return
 
-        if (
-            claim.allowEntityInteract == "false" ||
-            claim.allowEntityInteract == "onlyMounts"
-        ) {
+        if (claim.entityActions != "always") {
             if (!protection.canBypass(player, location)) {
                 event.isHatching = false
                 event.numHatches = 0

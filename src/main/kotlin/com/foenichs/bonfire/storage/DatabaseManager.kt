@@ -3,33 +3,38 @@ package com.foenichs.bonfire.storage
 import com.foenichs.bonfire.model.ChunkLayer
 import com.foenichs.bonfire.model.ChunkPos
 import com.foenichs.bonfire.model.Claim
+import com.foenichs.bonfire.service.MigrationService
 import java.io.File
 import java.sql.DriverManager
+import java.sql.SQLException
 import java.sql.Statement
 import java.util.UUID
 
 class DatabaseManager(dataFolder: File) {
-    private val connection = DriverManager.getConnection("jdbc:sqlite:${dataFolder.path}/claims.db")
+    val connection = DriverManager.getConnection("jdbc:sqlite:${dataFolder.path}/claims.db")
 
     init {
         if (!dataFolder.exists()) dataFolder.mkdirs()
         val s = connection.createStatement()
         s.execute("CREATE TABLE IF NOT EXISTS bonfire_metadata (meta_key TEXT PRIMARY KEY, meta_value TEXT)")
-        s.execute("CREATE TABLE IF NOT EXISTS claims (id INTEGER PRIMARY KEY AUTOINCREMENT, owner_uuid TEXT NOT NULL, allow_block_break BOOLEAN DEFAULT 0, allow_block_interact BOOLEAN DEFAULT 0, allow_entity_interact TEXT DEFAULT 'false')")
+        s.execute("CREATE TABLE IF NOT EXISTS claims (id INTEGER PRIMARY KEY AUTOINCREMENT, owner_uuid TEXT NOT NULL, block_actions TEXT DEFAULT 'never', entity_actions TEXT DEFAULT 'never')")
         s.execute("CREATE TABLE IF NOT EXISTS claim_chunks (claim_id INTEGER, world_uuid TEXT NOT NULL, chunk_key INTEGER NOT NULL, layer TEXT NOT NULL DEFAULT 'GROUND', FOREIGN KEY(claim_id) REFERENCES claims(id) ON DELETE CASCADE)")
         s.execute("CREATE TABLE IF NOT EXISTS trusted_players (claim_id INTEGER, player_uuid TEXT NOT NULL, trust_type TEXT NOT NULL, FOREIGN KEY(claim_id) REFERENCES claims(id) ON DELETE CASCADE)")
         s.execute("CREATE TABLE IF NOT EXISTS claim_aliases (claim_id INTEGER, legacy_id INTEGER, FOREIGN KEY(claim_id) REFERENCES claims(id) ON DELETE CASCADE)")
         s.execute("CREATE TABLE IF NOT EXISTS migration_queue (world_uuid TEXT NOT NULL, chunk_key INTEGER NOT NULL)")
         s.execute("CREATE TABLE IF NOT EXISTS limit_overrides (player_uuid TEXT PRIMARY KEY, extra_chunks INTEGER NOT NULL DEFAULT 0, extra_claims INTEGER NOT NULL DEFAULT 0)")
-
-        // Migrate table when updating to 1.6
-        val hasLayerColumn = connection.metaData.getColumns(null, null, "claim_chunks", "layer").use { it.next() }
-        if (!hasLayerColumn) {
-            s.execute("ALTER TABLE claim_chunks ADD COLUMN layer TEXT NOT NULL DEFAULT 'GROUND'")
-        }
     }
 
     fun loadAll(): List<Claim> {
+        return try {
+            readClaims()
+        } catch (_: SQLException) {
+            MigrationService.migrateDatabase(this)
+            readClaims()
+        }
+    }
+
+    private fun readClaims(): List<Claim> {
         val claims = mutableListOf<Claim>()
         val rs = connection.createStatement().executeQuery("SELECT * FROM claims")
         while (rs.next()) {
@@ -38,9 +43,8 @@ class DatabaseManager(dataFolder: File) {
                 id,
                 UUID.fromString(rs.getString("owner_uuid")),
                 mutableSetOf(),
-                rs.getBoolean("allow_block_break"),
-                rs.getBoolean("allow_block_interact"),
-                rs.getString("allow_entity_interact")
+                rs.getString("block_actions"),
+                rs.getString("entity_actions")
             )
             val crs = connection.createStatement().executeQuery("SELECT world_uuid, chunk_key, layer FROM claim_chunks WHERE claim_id = $id")
             while (crs.next()) c.chunks.add(ChunkPos(UUID.fromString(crs.getString("world_uuid")), crs.getLong("chunk_key"), ChunkLayer.valueOf(crs.getString("layer"))))
@@ -90,8 +94,8 @@ class DatabaseManager(dataFolder: File) {
     }
 
     fun updateRules(c: Claim) {
-        val ps = connection.prepareStatement("UPDATE claims SET allow_block_break = ?, allow_block_interact = ?, allow_entity_interact = ? WHERE id = ?")
-        ps.setBoolean(1, c.allowBlockBreak); ps.setBoolean(2, c.allowBlockInteract); ps.setString(3, c.allowEntityInteract); ps.setInt(4, c.id!!); ps.executeUpdate()
+        val ps = connection.prepareStatement("UPDATE claims SET block_actions = ?, entity_actions = ? WHERE id = ?")
+        ps.setString(1, c.blockActions); ps.setString(2, c.entityActions); ps.setInt(3, c.id!!); ps.executeUpdate()
     }
 
     fun addTrust(id: Int, u: UUID, type: String) {

@@ -43,7 +43,7 @@ class InteractProtectionListener(
             if (
                 event.action == Action.PHYSICAL &&
                 (block.type == Material.FARMLAND || block.type == Material.TURTLE_EGG) &&
-                !claim.allowBlockBreak
+                claim.blockActions != "always"
             ) {
                 event.setUseInteractedBlock(Event.Result.DENY)
                 event.isCancelled = true
@@ -53,7 +53,7 @@ class InteractProtectionListener(
             // Prevent interactions that break attached blocks
             if (
                 event.action == Action.RIGHT_CLICK_BLOCK &&
-                !claim.allowBlockBreak &&
+                claim.blockActions != "always" &&
                 wouldBreakNeighbor(block)
             ) {
                 event.setUseInteractedBlock(Event.Result.DENY)
@@ -61,11 +61,8 @@ class InteractProtectionListener(
                 return
             }
 
-            if (!claim.allowBlockInteract) {
-                val itemInHand = event.item
-                if (claim.allowBlockBreak && itemInHand != null && itemInHand.type.isBlock) {
-                    return
-                }
+            if (claim.blockActions == "never") {
+                event.setUseInteractedBlock(Event.Result.DENY)
 
                 event.setUseInteractedBlock(Event.Result.DENY)
 
@@ -105,7 +102,7 @@ class InteractProtectionListener(
         val block = event.block
         val claim = registry.getAt(block.location) ?: return
 
-        if (!claim.allowBlockInteract) {
+        if (claim.blockActions == "never") {
             val entity = event.entity
 
             // Allow projectiles shot by an added player
@@ -139,7 +136,7 @@ class InteractProtectionListener(
         val block = event.block
         val claim = registry.getAt(block.location) ?: return
 
-        if (!claim.allowBlockInteract) {
+        if (claim.blockActions == "never") {
             val entity = event.entity
             if (entity is Player && protection.canBypass(entity, block.location)) return
 
@@ -155,7 +152,7 @@ class InteractProtectionListener(
         val block = event.block
         val claim = registry.getAt(block.location) ?: return
 
-        if (!claim.allowBlockInteract) {
+        if (claim.blockActions == "never") {
             val player = event.player ?: return
             if (protection.canBypass(player, block.location)) return
 

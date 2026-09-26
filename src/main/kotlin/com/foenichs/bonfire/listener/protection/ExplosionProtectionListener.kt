@@ -57,7 +57,7 @@ class ExplosionProtectionListener(
             // Creeper targeting a trusted player
             if (source is Creeper) {
                 if (creeperTarget != null && protection.canBypass(creeperTarget, block.location)) continue
-                if (!claim.allowBlockBreak) iterator.remove()
+                if (claim.blockActions != "always") iterator.remove()
                 continue
             }
 
@@ -68,7 +68,7 @@ class ExplosionProtectionListener(
             }
 
             // Other explosions respect allowBlockBreak
-            if (!claim.allowBlockBreak) iterator.remove()
+            if (claim.blockActions != "always") iterator.remove()
         }
     }
 
@@ -81,7 +81,7 @@ class ExplosionProtectionListener(
         while (iterator.hasNext()) {
             val block = iterator.next()
             val claim = registry.getAt(block.location) ?: continue
-            if (!claim.allowBlockBreak) iterator.remove()
+            if (claim.blockActions != "always") iterator.remove()
         }
     }
 }
