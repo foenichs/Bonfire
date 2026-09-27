@@ -41,12 +41,7 @@ class ChunkCommand(
             val canClaim = canClaim(p)
 
             if (!canClaim && !isOwner(p)) {
-                if (claim != null) {
-                    val ownerName = Bukkit.getOfflinePlayer(claim.owner).name ?: "Unknown"
-                    Dialogs.chunkClaimed(p, ownerName)
-                } else {
-                    Dialogs.cannotClaim(p)
-                }
+                showCannotClaim(p, claim)
             } else {
                 ctx.source.sender.sendMessage(Component.text("Usage: /chunk <subcommand>", NamedTextColor.RED))
             }
@@ -151,12 +146,7 @@ class ChunkCommand(
             "claim" -> {
                 if (!canClaim(p)) {
                     event.isCancelled = true
-                    if (claim != null) {
-                        val ownerName = Bukkit.getOfflinePlayer(claim.owner).name ?: "Unknown"
-                        Dialogs.chunkClaimed(p, ownerName)
-                    } else {
-                        Dialogs.cannotClaim(p)
-                    }
+                    showCannotClaim(p, claim)
                 }
             }
 
@@ -286,6 +276,15 @@ class ChunkCommand(
         val claim = registry.getAt(p.location)
         val l = limits.getLimits(p)
         return claim == null && registry.getOwnedChunks(p.uniqueId) < l.maxChunks && registry.getOwnedClaimsCount(p.uniqueId) < l.maxClaims
+    }
+
+    private fun showCannotClaim(p: Player, claim: Claim?) {
+        if (claim != null) {
+            val ownerName = Bukkit.getOfflinePlayer(claim.owner).name ?: "Unknown"
+            Dialogs.chunkClaimed(p, ownerName)
+        } else {
+            Dialogs.cannotClaim(p, registry.getOwnedChunks(p.uniqueId), registry.getOwnedClaimsCount(p.uniqueId), limits.getLimits(p))
+        }
     }
 
     /**

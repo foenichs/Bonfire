@@ -58,4 +58,23 @@ class Messenger {
             Component.text().append(Component.text("You don't have access to do that right now.")).build()
         )
     }
+
+    /**
+     * Formats a duration in seconds as a readable string, e.g. "1 hour and 2 minutes"
+     */
+    fun formatDuration(totalSeconds: Long): String {
+        val s = totalSeconds.coerceAtLeast(0)
+        val hours = s / 3600; val minutes = (s % 3600) / 60; val seconds = s % 60
+
+        val parts = mutableListOf<String>()
+        if (hours > 0) parts.add("$hours hour" + if (hours != 1L) "s" else "")
+        if (minutes > 0) parts.add("$minutes minute" + if (minutes != 1L) "s" else "")
+        if (seconds > 0 || parts.isEmpty()) parts.add("$seconds second" + if (seconds != 1L) "s" else "")
+
+        return when (parts.size) {
+            1 -> parts[0]
+            2 -> "${parts[0]} and ${parts[1]}"
+            else -> "${parts.dropLast(1).joinToString(", ")}, and ${parts.last()}"
+        }
+    }
 }

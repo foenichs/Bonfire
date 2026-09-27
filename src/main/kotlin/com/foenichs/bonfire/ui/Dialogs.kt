@@ -1,6 +1,7 @@
 package com.foenichs.bonfire.ui
 
 import com.foenichs.bonfire.service.ClaimService
+import com.foenichs.bonfire.service.LimitService
 import io.papermc.paper.dialog.Dialog
 import io.papermc.paper.registry.data.dialog.ActionButton
 import io.papermc.paper.registry.data.dialog.DialogBase
@@ -68,11 +69,38 @@ object Dialogs {
         ))
     }
 
-    fun cannotClaim(viewer: Player) {
+    private data class LimitReason(val count: Int, val noun: String, val capped: Boolean, val atCap: Boolean, val minutesToNext: Int?)
+
+    fun cannotClaim(viewer: Player, ownedChunks: Int, ownedClaims: Int, limits: LimitService.Limits) {
         val word = ClaimService.chunkWord(viewer.location)
+
+        var reasons = buildList {
+            if (ownedChunks >= limits.maxChunks) add(LimitReason(limits.maxChunks, "chunk", limits.chunksCapped, limits.chunksAtCap, limits.minutesToNextChunk))
+            if (ownedClaims >= limits.maxClaims) add(LimitReason(limits.maxClaims, "claim", limits.claimsCapped, limits.claimsAtCap, limits.minutesToNextClaim))
+        }
+
+        if (reasons.any { it.capped } && reasons.any { !it.capped }) reasons = reasons.filter { it.capped }
+
+        fun label(r: LimitReason) = (if (r.noun == "chunk") "claimed chunk" else r.noun) + if (r.count == 1) "" else "s"
+        fun capPhrase(r: LimitReason) = if (r.count == 0) "${if (r.atCap) "the" else "your"} ${r.noun} limit" else "${if (r.atCap) "the" else "your"} limit of ${r.count} ${label(r)}"
+
+        val cause = if (reasons.size == 1 && reasons[0].count == 0 && !reasons[0].atCap && reasons[0].minutesToNext != null) {
+            "you haven't earned any ${reasons[0].noun}s"
+        } else {
+            "you've reached " + reasons.joinToString(" and ") { capPhrase(it) }
+        }
+
+        val nextTimes = reasons.mapNotNull { r -> r.minutesToNext?.let { r.noun to msg.formatDuration(it * 60L) } }
+        val next = when (nextTimes.size) {
+            0 -> ""
+            1 -> " You'll earn your next one in ${nextTimes[0].second}."
+            else -> " You'll earn your next " + nextTimes.joinToString(" and your next ") { "${it.first} in ${it.second}" } + "."
+        }
+        val yet = if (nextTimes.isEmpty()) "" else " yet"
+
         viewer.showDialog(errorDialog(
-            Component.text("You can't claim this $word.")
-                .append(Component.text(" You have either reached your claim limit or you haven't earned any claims yet.", NamedTextColor.GRAY))
+            Component.text("You can't claim this $word$yet")
+                .append(Component.text(", as $cause.$next", NamedTextColor.GRAY))
         ))
     }
 

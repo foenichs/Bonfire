@@ -49,8 +49,8 @@ class EscapeService(
     fun promptEscape(p: Player) {
         if (!isRestricted(p)) return
         val remaining = remainingCooldown(p)
-        if (remaining > 0) { Dialogs.escapeOnCooldown(p, formatDuration(remaining)); return }
-        Dialogs.escapeConfirm(p, formatDuration(cooldownSeconds())) { performEscape(p) }
+        if (remaining > 0) { Dialogs.escapeOnCooldown(p, msg.formatDuration(remaining)); return }
+        Dialogs.escapeConfirm(p, msg.formatDuration(cooldownSeconds())) { performEscape(p) }
     }
 
     /**
@@ -64,7 +64,7 @@ class EscapeService(
 
         cooldowns[p.uniqueId] = System.currentTimeMillis()
         p.teleportAsync(target)
-        msg.send(p, Component.text("You successfully escaped the claim. You can escape again in ${formatDuration(cooldownSeconds())}."))
+        msg.send(p, Component.text("You successfully escaped the claim. You can escape again in ${msg.formatDuration(cooldownSeconds())}."))
     }
 
     private fun cooldownSeconds(): Long = plugin.config.getLong("escaping.cooldown", 300L)
@@ -224,24 +224,5 @@ class EscapeService(
         for (dx in -r..r) { points.add(intArrayOf(cx + dx, cz - r)); points.add(intArrayOf(cx + dx, cz + r)) }
         for (dz in -r + 1..<r) { points.add(intArrayOf(cx - r, cz + dz)); points.add(intArrayOf(cx + r, cz + dz)) }
         return points.sortedBy { p -> val dx = p[0] - cx; val dz = p[1] - cz; dx * dx + dz * dz }
-    }
-
-    /**
-     * Formats a duration in seconds as a readable string, e.g. "1 hour and 2 minutes"
-     */
-    private fun formatDuration(totalSeconds: Long): String {
-        val s = totalSeconds.coerceAtLeast(0)
-        val hours = s / 3600; val minutes = (s % 3600) / 60; val seconds = s % 60
-
-        val parts = mutableListOf<String>()
-        if (hours > 0) parts.add("$hours hour" + if (hours != 1L) "s" else "")
-        if (minutes > 0) parts.add("$minutes minute" + if (minutes != 1L) "s" else "")
-        if (seconds > 0 || parts.isEmpty()) parts.add("$seconds second" + if (seconds != 1L) "s" else "")
-
-        return when (parts.size) {
-            1 -> parts[0]
-            2 -> "${parts[0]} and ${parts[1]}"
-            else -> "${parts.dropLast(1).joinToString(", ")}, and ${parts.last()}"
-        }
     }
 }
