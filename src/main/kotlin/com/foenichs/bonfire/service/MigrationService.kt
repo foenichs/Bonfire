@@ -8,11 +8,16 @@ import com.foenichs.bonfire.storage.DatabaseManager
 import org.bukkit.Bukkit
 import org.bukkit.Chunk
 import org.bukkit.World
+import org.bukkit.configuration.file.YamlConfiguration
 import org.bukkit.entity.*
 import org.bukkit.event.EventHandler
 import org.bukkit.event.EventPriority
 import org.bukkit.event.Listener
 import org.bukkit.event.world.ChunkLoadEvent
+import org.bukkit.plugin.java.JavaPlugin
+import org.yaml.snakeyaml.Yaml
+import java.io.File
+import java.io.StringReader
 
 class MigrationService(
     private val plugin: Bonfire,
@@ -51,6 +56,89 @@ class MigrationService(
             val hasLayerColumn = conn.metaData.getColumns(null, null, "claim_chunks", "layer").use { it.next() }
             if (!hasLayerColumn) {
                 s.execute("ALTER TABLE claim_chunks ADD COLUMN layer TEXT NOT NULL DEFAULT 'GROUND'")
+            }
+        }
+
+        private val configKeyLine = Regex("""^(\s*)([\w.-]+):\s*(.*)$""")
+        private val configInlineComment = Regex("""^(.*?)(\s+#.*)?$""")
+        private val configYaml = Yaml()
+
+        /**
+         * Rebuilds config.yml from default while keeping original values
+         */
+        fun migrateConfig(plugin: JavaPlugin) {
+            val configFile = File(plugin.dataFolder, "config.yml")
+            val template = plugin.getResource("config.yml")?.bufferedReader()?.use { it.readText() } ?: return
+
+            if (!configFile.exists()) {
+                plugin.saveDefaultConfig()
+                return
+            }
+
+            val old = YamlConfiguration.loadConfiguration(configFile)
+            migrateDefaultRules(old)
+            val merged = mergeConfig(template, old)
+
+            if (merged != configFile.readText()) configFile.writeText(merged)
+        }
+
+        /**
+         * Maps legacy claim rules onto blockActions/entityActions
+         */
+        private fun migrateDefaultRules(old: YamlConfiguration) {
+            if (!old.isSet("default-rules.blockActions") && (old.isSet("default-rules.allowBlockBreak") || old.isSet("default-rules.allowBlockInteract"))) {
+                old.set("default-rules.blockActions", if (old.getBoolean("default-rules.allowBlockBreak")) "always" else if (old.getBoolean("default-rules.allowBlockInteract")) "interactOnly" else "never")
+            }
+            if (!old.isSet("default-rules.entityActions") && old.isSet("default-rules.allowEntityInteract")) {
+                old.set("default-rules.entityActions", when (old.getString("default-rules.allowEntityInteract")) { "true" -> "always"; "onlyMounts" -> "interactOnly"; else -> "never" })
+            }
+        }
+
+        /**
+         * Inserts original values into the template, dropping unused map sections
+         */
+        private fun mergeConfig(template: String, old: YamlConfiguration): String {
+            val text = template.replace("\r\n", "\n")
+            val defaults = YamlConfiguration.loadConfiguration(StringReader(text))
+            val skip = listOf("bluemap" to "BlueMap", "squaremap" to "squaremap").filter { (path, pluginName) ->
+                if (Bukkit.getPluginManager().isPluginEnabled(pluginName)) return@filter false
+                val section = defaults.getConfigurationSection(path)
+                section == null || !old.isSet(path) || section.getKeys(true).filter { !section.isConfigurationSection(it) }.all { old.get("$path.$it") == section.get(it) }
+            }.map { it.first }
+
+            return text.split("\n\n").filter { block ->
+                val firstLine = block.lineSequence().firstOrNull { it.isNotBlank() && !it.trimStart().startsWith("#") }
+                firstLine == null || configKeyLine.matchEntire(firstLine)?.groupValues?.get(2) !in skip
+            }.joinToString("\n\n") { mergeBlock(it, old) }
+        }
+
+        /**
+         * Inserts original values into one config section
+         */
+        private fun mergeBlock(block: String, old: YamlConfiguration): String {
+            val path = ArrayDeque<Pair<Int, String>>()
+            return block.lineSequence().joinToString("\n") { line ->
+                val trimmed = line.trimStart()
+                val match = if (trimmed.isEmpty() || trimmed.startsWith("#")) null else configKeyLine.matchEntire(line)
+
+                if (match == null) {
+                    line
+                } else {
+                    val indent = match.groupValues[1].length
+                    val key = match.groupValues[2]
+                    val rest = match.groupValues[3]
+                    while (path.isNotEmpty() && path.last().first >= indent) path.removeLast()
+
+                    if (rest.isBlank()) {
+                        path.addLast(indent to key)
+                        line
+                    } else {
+                        val fullPath = (path.map { it.second } + key).joinToString(".")
+                        val (value, comment) = configInlineComment.matchEntire(rest)!!.destructured
+                        val newValue = if (old.isSet(fullPath)) configYaml.dump(old.get(fullPath)).trim() else value
+                        "${" ".repeat(indent)}$key: $newValue$comment"
+                    }
+                }
             }
         }
     }

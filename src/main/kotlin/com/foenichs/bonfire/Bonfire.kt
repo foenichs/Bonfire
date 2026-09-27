@@ -46,7 +46,7 @@ class Bonfire : JavaPlugin() {
         }
 
         // Initialize Configuration
-        saveDefaultConfig()
+        MigrationService.migrateConfig(this)
 
         // Initialize Database and Memory Cache
         db = DatabaseManager(dataFolder)
