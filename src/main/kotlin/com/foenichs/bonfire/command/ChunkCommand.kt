@@ -64,7 +64,15 @@ class ChunkCommand(
             })
 
             .then(
-                Commands.literal("setrule").requires { (it.sender as? Player)?.let { p -> isOwner(p) } ?: false }
+                Commands.literal("rules").requires { (it.sender as? Player)?.let { p -> isOwner(p) } ?: false }
+                    .executes { ctx ->
+                        val p = ctx.source.sender as? Player ?: return@executes 0
+                        Dialogs.claimRulesDialog(p) { ruleName ->
+                            val property: (Claim) -> String = if (ruleName.equals("blockActions", true)) { c -> c.blockActions } else { c -> c.entityActions }
+                            showRuleToggle(p, ruleName, property)
+                        }
+                        1
+                    }
                     .then(ruleNode("blockActions") { it.blockActions })
                     .then(ruleNode("entityActions") { it.entityActions })
             )
@@ -159,7 +167,7 @@ class ChunkCommand(
                 }
             }
 
-            "unclaim", "setrule", "addplayer", "removeplayer" -> {
+            "unclaim", "rules", "addplayer", "removeplayer" -> {
                 if (claim == null || claim.owner != p.uniqueId) {
                     event.isCancelled = true
                     if (claim != null) {
@@ -190,7 +198,7 @@ class ChunkCommand(
                         }
                     }
 
-                    "setrule" -> {
+                    "rules" -> {
                         if (parts.size >= 4) {
                             val rule = parts[2]
                             val value = parts[3]
@@ -247,6 +255,11 @@ class ChunkCommand(
      */
     private fun ruleNode(name: String, property: (Claim) -> String) =
         Commands.literal(name)
+            .executes { ctx ->
+                val p = ctx.source.sender as? Player ?: return@executes 0
+                showRuleToggle(p, name, property)
+                1
+            }
             .then(Commands.literal("always").requires { (it.sender as? Player)?.let { p -> registry.getAt(p.location)?.let { c -> property(c) != "always" } } ?: true }.executes { ctx ->
                 service.setRule(ctx.source.sender as Player, name, "always"); 1
             })
@@ -256,6 +269,11 @@ class ChunkCommand(
             .then(Commands.literal("never").requires { (it.sender as? Player)?.let { p -> registry.getAt(p.location)?.let { c -> property(c) != "never" } } ?: true }.executes { ctx ->
                 service.setRule(ctx.source.sender as Player, name, "never"); 1
             })
+
+    private fun showRuleToggle(p: Player, name: String, property: (Claim) -> String) {
+        val claim = registry.getAt(p.location) ?: return
+        Dialogs.ruleToggleDialog(p, name, property(claim)) { selected -> service.setRule(p, name, selected) }
+    }
 
     private fun isOwner(p: Player?) = p?.let { registry.getAt(it.location)?.owner == it.uniqueId } ?: false
 

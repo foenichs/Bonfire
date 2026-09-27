@@ -173,25 +173,36 @@ class ClaimService(
         if (!verifyPermissions(p)) return
         val c = registry.getAt(p.location) ?: return
         if (v != "always" && v != "interactOnly" && v != "never") return
+        val unchanged = when (r) {
+            "blockActions" -> c.blockActions == v
+            "entityActions" -> c.entityActions == v
+            else -> return
+        }
+        if (unchanged) return
         when (r) {
             "blockActions" -> c.blockActions = v
             "entityActions" -> c.entityActions = v
-            else -> return
         }
         db.updateRules(c)
+        val ruleLabel = if (r == "blockActions") "Block actions" else "Entity actions"
+        val valuePhrase = when (v) {
+            "always" -> "always allowed"
+            "interactOnly" -> "only allowed when interacting"
+            else -> "never allowed"
+        }
         val desc = when (r) {
             "blockActions" -> when (v) {
-                "always" -> "Players can now break, place, and interact with blocks on your claim."
-                "interactOnly" -> "Players can now interact with blocks on your claim, but can't place or break them."
+                "always" -> "Players can break, place, and interact with blocks on your claim."
+                "interactOnly" -> "Players can interact with blocks on your claim, but can't place or break them."
                 else -> "Players can no longer place, break, or interact with blocks on your claim."
             }
             else -> when (v) {
-                "always" -> "Players can now interact, mount, trade, collide with, and damage entities."
-                "interactOnly" -> "Players can now interact, mount, and trade with entities, but can't damage them."
+                "always" -> "Players can interact, mount, trade, collide with, and damage entities."
+                "interactOnly" -> "Players can interact, mount, and trade with entities, but can't damage them."
                 else -> "Players can no longer interact with, mount, trade with, collide with, or damage entities."
             }
         }
-        msg.send(p, Component.text().append(Component.text("Set $r to $v. ")).append(Component.text(desc, NamedTextColor.GRAY)).build())
+        msg.send(p, Component.text().append(Component.text("$ruleLabel are now $valuePhrase. ")).append(Component.text(desc, NamedTextColor.GRAY)).build())
         visualService.refreshClaim(c)
     }
 

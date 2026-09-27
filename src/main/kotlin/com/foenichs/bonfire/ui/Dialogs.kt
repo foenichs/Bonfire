@@ -6,6 +6,8 @@ import io.papermc.paper.registry.data.dialog.ActionButton
 import io.papermc.paper.registry.data.dialog.DialogBase
 import io.papermc.paper.registry.data.dialog.action.DialogAction
 import io.papermc.paper.registry.data.dialog.body.DialogBody
+import io.papermc.paper.registry.data.dialog.input.DialogInput
+import io.papermc.paper.registry.data.dialog.input.SingleOptionDialogInput
 import io.papermc.paper.registry.data.dialog.type.DialogType
 import net.kyori.adventure.text.Component
 import net.kyori.adventure.text.event.ClickCallback
@@ -154,6 +156,70 @@ object Dialogs {
     fun escapingDisabled(viewer: Player) {
         viewer.showDialog(errorDialog(Component.text("Escaping is disabled on this server.")
             .append(Component.text(" If you're stuck in a claim, please contact a server operator.", NamedTextColor.GRAY))))
+    }
+
+    fun claimRulesDialog(viewer: Player, onSelectRule: (String) -> Unit) {
+        val dialog = Dialog.create { b ->
+            b.empty().base(
+                DialogBase.builder(Component.text("Claim Rules"))
+                    .body(listOf(DialogBody.plainMessage(Component.text("Manage how others can interact with blocks and entities in your claim."))))
+                    .build()
+            ).type(
+                DialogType.multiAction(listOf(
+                    ActionButton.create(
+                        Component.text("Block Actions"),
+                        Component.text("Whether blocks can be destroyed or placed by players, explosions, pistons, water, growing structures, etc."),
+                        90,
+                        DialogAction.customClick({ _, _ -> onSelectRule("blockActions") }, ClickCallback.Options.builder().uses(1).build())
+                    ),
+                    ActionButton.create(
+                        Component.text("Entity Actions"),
+                        Component.text("Whether players can damage entities, collide with them, get targeted by them, or only interact with them."),
+                        90,
+                        DialogAction.customClick({ _, _ -> onSelectRule("entityActions") }, ClickCallback.Options.builder().uses(1).build())
+                    )
+                )).build()
+            )
+        }
+        viewer.showDialog(dialog)
+    }
+
+    fun ruleToggleDialog(
+        viewer: Player,
+        ruleName: String,
+        currentValue: String,
+        onSelect: (String) -> Unit
+    ) {
+        val isBlock = ruleName.equals("blockActions", ignoreCase = true)
+        val titleText = if (isBlock) "Block Actions" else "Entity Actions"
+        val bodyText = if (isBlock) "When should block actions be allowed for other players in your claim?" else "When should entity actions be allowed for other players in your claim?"
+        val labelText = if (isBlock) "Blocks" else "Entities"
+
+        val options = listOf(
+            SingleOptionDialogInput.OptionEntry.create("always", Component.text("Always"), currentValue.equals("always", ignoreCase = true)),
+            SingleOptionDialogInput.OptionEntry.create("interactOnly", Component.text("Interacting only"), currentValue.equals("interactOnly", ignoreCase = true)),
+            SingleOptionDialogInput.OptionEntry.create("never", Component.text("Never"), currentValue.equals("never", ignoreCase = true))
+        )
+
+        val input = DialogInput.singleOption("value", 152, options, Component.text(labelText), false)
+
+        val dialog = Dialog.create { b ->
+            b.empty().base(
+                DialogBase.builder(Component.text(titleText))
+                    .body(listOf(DialogBody.plainMessage(Component.text(bodyText))))
+                    .inputs(listOf(input))
+                    .build()
+            ).type(
+                DialogType.multiAction(listOf(
+                    ActionButton.create(Component.text("Cancel"), null, 75, DialogAction.customClick({ _, _ -> }, ClickCallback.Options.builder().uses(1).build())),
+                    ActionButton.create(Component.text("Confirm"), null, 75, DialogAction.customClick({ view, _ ->
+                        val selected = view.getText("value") ?: return@customClick
+                        onSelect(selected)
+                    }, ClickCallback.Options.builder().uses(1).build()))
+                )).build()
+            )
+        }
+        viewer.showDialog(dialog)
     }
 
     fun playerHasNoClaims(viewer: Player, name: String) {
