@@ -316,6 +316,11 @@ class ClaimService(
         return vis.size == rem.size
     }
 
+    fun isNewClaim(p: Player): Boolean {
+        val loc = p.location; val ch = loc.chunk
+        return findAdj(p, ch.world.uid, ch.x, ch.z, ChunkPos.layerFor(loc)).isEmpty()
+    }
+
     private fun findAdj(p: Player, w: UUID, x: Int, z: Int, layer: ChunkLayer): List<Claim> {
         val horizontalKeys = listOf(Chunk.getChunkKey(x+1,z), Chunk.getChunkKey(x-1,z), Chunk.getChunkKey(x,z+1), Chunk.getChunkKey(x,z-1))
         val currentKey = Chunk.getChunkKey(x, z)

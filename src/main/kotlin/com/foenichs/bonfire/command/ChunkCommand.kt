@@ -275,7 +275,8 @@ class ChunkCommand(
     private fun canClaim(p: Player): Boolean {
         val claim = registry.getAt(p.location)
         val l = limits.getLimits(p)
-        return claim == null && registry.getOwnedChunks(p.uniqueId) < l.maxChunks && registry.getOwnedClaimsCount(p.uniqueId) < l.maxClaims
+        if (claim != null || registry.getOwnedChunks(p.uniqueId) >= l.maxChunks) return false
+        return !service.isNewClaim(p) || registry.getOwnedClaimsCount(p.uniqueId) < l.maxClaims
     }
 
     private fun showCannotClaim(p: Player, claim: Claim?) {
@@ -283,7 +284,7 @@ class ChunkCommand(
             val ownerName = Bukkit.getOfflinePlayer(claim.owner).name ?: "Unknown"
             Dialogs.chunkClaimed(p, ownerName)
         } else {
-            Dialogs.cannotClaim(p, registry.getOwnedChunks(p.uniqueId), registry.getOwnedClaimsCount(p.uniqueId), limits.getLimits(p))
+            Dialogs.cannotClaim(p, registry.getOwnedChunks(p.uniqueId), registry.getOwnedClaimsCount(p.uniqueId), limits.getLimits(p), service.isNewClaim(p))
         }
     }
 

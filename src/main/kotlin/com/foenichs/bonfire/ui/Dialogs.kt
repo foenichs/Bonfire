@@ -71,12 +71,12 @@ object Dialogs {
 
     private data class LimitReason(val count: Int, val noun: String, val capped: Boolean, val atCap: Boolean, val minutesToNext: Int?)
 
-    fun cannotClaim(viewer: Player, ownedChunks: Int, ownedClaims: Int, limits: LimitService.Limits) {
+    fun cannotClaim(viewer: Player, ownedChunks: Int, ownedClaims: Int, limits: LimitService.Limits, isNewClaim: Boolean) {
         val word = ClaimService.chunkWord(viewer.location)
 
         var reasons = buildList {
             if (ownedChunks >= limits.maxChunks) add(LimitReason(limits.maxChunks, "chunk", limits.chunksCapped, limits.chunksAtCap, limits.minutesToNextChunk))
-            if (ownedClaims >= limits.maxClaims) add(LimitReason(limits.maxClaims, "claim", limits.claimsCapped, limits.claimsAtCap, limits.minutesToNextClaim))
+            if (isNewClaim && ownedClaims >= limits.maxClaims) add(LimitReason(limits.maxClaims, "claim", limits.claimsCapped, limits.claimsAtCap, limits.minutesToNextClaim))
         }
 
         if (reasons.any { it.capped } && reasons.any { !it.capped }) reasons = reasons.filter { it.capped }
