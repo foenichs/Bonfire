@@ -47,27 +47,29 @@ class WorldProtectionListener(
     }
 
     /**
-     * Prevent empty boats/minecarts from entering claims
+     * Prevent boats/minecarts from entering claims unescorted or bringing entities in
      */
     @EventHandler(priority = EventPriority.LOWEST, ignoreCancelled = true)
     fun onVehicleMove(event: VehicleMoveEvent) {
         val vehicle = event.vehicle
-        if (vehicle.passengers.isNotEmpty()) return
-
         val from = event.from
         val to = event.to
         if (from.chunk == to.chunk && ChunkPos.layerFor(from) == ChunkPos.layerFor(to)) return
 
         val claim = registry.getAt(to) ?: return
-        if (claim.entityActions != "always" && !protection.isOrigin(vehicle, to)) {
-            val material = when (vehicle) {
-                is Boat -> vehicle.boatMaterial
-                is Minecart -> Material.MINECART
-                else -> return
-            }
-            vehicle.world.dropItemNaturally(vehicle.location, ItemStack(material))
-            vehicle.remove()
+        if (claim.entityActions == "always" || protection.isOrigin(vehicle, to)) return
+
+        val passengers = vehicle.passengers
+        if (passengers.any { it is Player && protection.canBypass(it, to) }) return
+        if (passengers.any { it is Player } && passengers.none { it !is Player }) return
+
+        val material = when (vehicle) {
+            is Boat -> vehicle.boatMaterial
+            is Minecart -> Material.MINECART
+            else -> return
         }
+        vehicle.world.dropItemNaturally(vehicle.location, ItemStack(material))
+        vehicle.remove()
     }
 
     /**
