@@ -10,15 +10,21 @@ class LimitService(private var config: FileConfiguration, private val db: Databa
         val maxChunks: Int, val maxClaims: Int,
         val minutesToNextChunk: Int?, val minutesToNextClaim: Int?,
         val chunksCapped: Boolean, val claimsCapped: Boolean,
-        val chunksAtCap: Boolean, val claimsAtCap: Boolean
+        val chunksAtCap: Boolean, val claimsAtCap: Boolean,
+        val baseChunks: Int, val baseClaims: Int,
+        val multipliedChunks: Int, val multipliedClaims: Int
     )
+
+    companion object {
+        private const val MULTIPLIER_PREFIX = "bonfire.playtime_multiplier."
+    }
 
     fun updateConfig(c: FileConfiguration) {
         this.config = c
     }
 
     fun getLimits(p: Player): Limits {
-        if (!config.getBoolean("limits.enabled", true)) return Limits(Int.MAX_VALUE, Int.MAX_VALUE, null, null, false, false, false, false)
+        if (!config.getBoolean("limits.enabled", true)) return Limits(Int.MAX_VALUE, Int.MAX_VALUE, null, null, false, false, false, false, Int.MAX_VALUE, Int.MAX_VALUE, Int.MAX_VALUE, Int.MAX_VALUE)
         val mins = p.getStatistic(Statistic.PLAY_ONE_MINUTE) / 1200
         val earningEnabled = config.getBoolean("limits.playtime-earning.enabled", true)
         val minsPerChunk = config.getInt("limits.playtime-earning.minutes-per-chunk", 60)
@@ -33,15 +39,43 @@ class LimitService(private var config: FileConfiguration, private val db: Databa
 
         val chunksCapped = mCh != -1
         val claimsCapped = mCl != -1
+        val baseCh = if (chunksCapped) fCh.coerceAtMost(mCh) else fCh
+        val baseCl = if (claimsCapped) fCl.coerceAtMost(mCl) else fCl
         val nextChunk = if (earningEnabled && (!chunksCapped || fCh < mCh)) minsPerChunk - mins % minsPerChunk else null
         val nextClaim = if (earningEnabled && (!claimsCapped || fCl < mCl)) minsPerClaim - mins % minsPerClaim else null
 
+        val multiplier = playtimeMultiplier(p)
+        val multipliedCh = multiplier?.let { (baseCh * it).toInt().let { v -> if (chunksCapped) v.coerceAtMost(mCh) else v } } ?: baseCh
+        val multipliedCl = multiplier?.let { (baseCl * it).toInt().let { v -> if (claimsCapped) v.coerceAtMost(mCl) else v } } ?: baseCl
+
         return Limits(
-            (if (chunksCapped) fCh.coerceAtMost(mCh) else fCh) + extraCh,
-            (if (claimsCapped) fCl.coerceAtMost(mCl) else fCl) + extraCl,
+            maxOf(baseCh, multipliedCh) + extraCh,
+            maxOf(baseCl, multipliedCl) + extraCl,
             nextChunk, nextClaim,
             chunksCapped, claimsCapped,
-            chunksCapped && fCh >= mCh, claimsCapped && fCl >= mCl
+            chunksCapped && fCh >= mCh, claimsCapped && fCl >= mCl,
+            baseCh, baseCl,
+            multipliedCh, multipliedCl
         )
+    }
+
+    /**
+     * The highest playtime multiplier permission a player holds
+     */
+    fun playtimeMultiplier(p: Player): Double? {
+        return p.effectivePermissions
+            .mapNotNull { if (it.value && it.permission.startsWith(MULTIPLIER_PREFIX)) it.permission.removePrefix(MULTIPLIER_PREFIX).toIntOrNull() else null }
+            .maxOrNull()?.div(100.0)
+    }
+
+    /**
+     * Syncs overrides with used multiplier claim limits, making them persistent
+     */
+    fun syncMultiplierOverride(p: Player, ownedChunks: Int, ownedClaims: Int) {
+        if (playtimeMultiplier(p) == null) return
+        val l = getLimits(p)
+        val bonusCh = (ownedChunks - l.baseChunks).coerceIn(0, (l.multipliedChunks - l.baseChunks).coerceAtLeast(0))
+        val bonusCl = (ownedClaims - l.baseClaims).coerceIn(0, (l.multipliedClaims - l.baseClaims).coerceAtLeast(0))
+        db.setLimitOverride(p.uniqueId, bonusCh, bonusCl)
     }
 }

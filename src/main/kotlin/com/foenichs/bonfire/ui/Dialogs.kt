@@ -250,6 +250,45 @@ object Dialogs {
         viewer.showDialog(dialog)
     }
 
+    fun overrideLimits(viewer: Player, name: String, chunks: Int, claims: Int, multiplierActive: Boolean, onApply: (chunks: Int, claims: Int) -> Unit) {
+        val cropped = name.take(16)
+        val nameComponent = Component.text().append(msg.head(cropped)).append(Component.space()).append(Component.text(cropped, NamedTextColor.WHITE, TextDecoration.BOLD)).build()
+
+        if (multiplierActive) {
+            viewer.showDialog(infoDialog(
+                Component.text().append(Component.text("Limit overrides for ")).append(nameComponent)
+                    .append(Component.text(" are currently managed by a playtime earning multiplier.")).build()
+            ))
+            return
+        }
+
+        viewer.showDialog(overrideLimitsDialog(viewer, nameComponent, chunks, claims, onApply))
+    }
+
+    private fun overrideLimitsDialog(viewer: Player, nameComponent: Component, chunks: Int, claims: Int, onApply: (Int, Int) -> Unit): Dialog = Dialog.create { b ->
+        b.empty().base(
+            DialogBase.builder(Component.text("Limit Overrides"))
+                .body(listOf(DialogBody.plainMessage(
+                    Component.text().append(Component.text("How many additional chunks and claims should ")).append(nameComponent)
+                        .append(Component.text(" have?")).build()
+                )))
+                .inputs(listOf(
+                    DialogInput.text("chunks", Component.text("Chunks")).width(120).initial(chunks.toString()).build(),
+                    DialogInput.text("claims", Component.text("Claims")).width(120).initial(claims.toString()).build()
+                ))
+                .build()
+        ).type(
+            DialogType.multiAction(listOf(
+                ActionButton.create(Component.text("Apply"), null, 60, DialogAction.customClick({ view, _ ->
+                    onApply(view.getText("chunks")?.toIntOrNull() ?: 0, view.getText("claims")?.toIntOrNull() ?: 0)
+                }, ClickCallback.Options.builder().uses(1).build())),
+                ActionButton.create(Component.text("Reset values"), null, 90, DialogAction.customClick({ _, audience ->
+                    audience.showDialog(overrideLimitsDialog(viewer, nameComponent, 0, 0, onApply))
+                }, ClickCallback.Options.builder().uses(1).build()))
+            )).build()
+        )
+    }
+
     fun playerHasNoClaims(viewer: Player, name: String) {
         val cropped = name.take(16)
         viewer.showDialog(errorDialog(

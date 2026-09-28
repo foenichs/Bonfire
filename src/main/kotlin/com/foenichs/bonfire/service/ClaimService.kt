@@ -49,9 +49,9 @@ class ClaimService(
     fun tryClaim(p: Player) {
         val loc = p.location; val ch = loc.chunk; val w = ch.world.uid; val k = ch.chunkKey; val layer = ChunkPos.layerFor(loc)
         val word = chunkWord(loc, layer)
-        val limits = limits.getLimits(p)
+        val lim = limits.getLimits(p)
         if (registry.getAt(w, k, layer) != null) return
-        if (registry.getOwnedChunks(p.uniqueId) >= limits.maxChunks) return
+        if (registry.getOwnedChunks(p.uniqueId) >= lim.maxChunks) return
 
         val adj = findAdj(p, w, ch.x, ch.z, layer)
         when {
@@ -61,19 +61,20 @@ class ClaimService(
                 updateClaimMarkers(c)
                 msg.send(p, Component.text("Successfully claimed this $word and added it to your claim."))
                 visualService.refreshChunk(pos)
+                limits.syncMultiplierOverride(p, registry.getOwnedChunks(p.uniqueId), registry.getOwnedClaimsCount(p.uniqueId))
             }
             adj.size > 1 -> {
                 val m = PendingMerge(w, k, layer, adj.sortedBy { it.id })
                 Dialogs.mergeClaims(p) {
                     if (!p.isOnline) return@mergeClaims
                     if (registry.getAt(w, k, layer) != null) return@mergeClaims
-                    if (registry.getOwnedChunks(p.uniqueId) >= limits.maxChunks) return@mergeClaims
+                    if (registry.getOwnedChunks(p.uniqueId) >= lim.maxChunks) return@mergeClaims
                     if (m.claims.any { !registry.getAll().contains(it) }) return@mergeClaims
                     executeMerge(p, m)
                 }
             }
             else -> {
-                if (registry.getOwnedClaimsCount(p.uniqueId) >= limits.maxClaims) return
+                if (registry.getOwnedClaimsCount(p.uniqueId) >= lim.maxClaims) return
                 val id = db.createClaim(p.uniqueId); val pos = ChunkPos(w, k, layer)
                 val defBlock = plugin.config.getString("default-rules.blockActions", "never")!!
                 val defEntity = plugin.config.getString("default-rules.entityActions", "never")!!
@@ -84,6 +85,7 @@ class ClaimService(
                 updateClaimMarkers(claim)
                 msg.send(p, Component.text("Successfully claimed this $word and created a new claim."))
                 visualService.refreshChunk(pos)
+                limits.syncMultiplierOverride(p, registry.getOwnedChunks(p.uniqueId), registry.getOwnedClaimsCount(p.uniqueId))
             }
         }
     }
@@ -275,6 +277,7 @@ class ClaimService(
         updateClaimMarkers(main)
         msg.send(p, Component.text("Successfully merged your claims."))
         visualService.refreshClaim(main)
+        limits.syncMultiplierOverride(p, registry.getOwnedChunks(p.uniqueId), registry.getOwnedClaimsCount(p.uniqueId))
     }
 
     private fun handleClaimRemoval(c: Claim) {

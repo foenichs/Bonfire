@@ -90,7 +90,7 @@ class Bonfire : JavaPlugin() {
                 reloadConfig()
                 limitService.updateConfig(config)
                 mapServices.forEach { it.refreshAll() }
-            }, claimService, db, messenger).register(event.registrar())
+            }, claimService, db, messenger, limitService).register(event.registrar())
         }
 
         // Register Event Listeners
