@@ -151,6 +151,7 @@ class MigrationService(
             db.setMetadata("data_version", requiredDataVersion)
         } else if (currentVersion == null || isNewerThan(currentVersion)) {
             migrateDatabase(db)
+            deleteOrphanedRows()
             db.fillMigrationQueue()
             mergeNetherRoofClaims()
             db.setMetadata("data_version", requiredDataVersion)
@@ -195,6 +196,16 @@ class MigrationService(
                 }
             }
         }
+    }
+
+    /**
+     * Deletes rows whose claim no longer exists
+     */
+    private fun deleteOrphanedRows() {
+        val s = db.connection.createStatement()
+        s.execute("DELETE FROM claim_chunks WHERE claim_id NOT IN (SELECT id FROM claims)")
+        s.execute("DELETE FROM trusted_players WHERE claim_id NOT IN (SELECT id FROM claims)")
+        s.execute("DELETE FROM claim_aliases WHERE claim_id NOT IN (SELECT id FROM claims)")
     }
 
     /**

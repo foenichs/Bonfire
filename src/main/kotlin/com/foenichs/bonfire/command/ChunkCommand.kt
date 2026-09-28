@@ -153,7 +153,7 @@ class ChunkCommand(
             "escape" -> {
                 if (!escape.isRestricted(p)) {
                     event.isCancelled = true
-                    if (!escape.isEnabled()) Dialogs.escapingDisabled(p) else Dialogs.chunkNotClaimed(p)
+                    if (!escape.isEnabled()) Dialogs.escapingDisabled(p) else Dialogs.escapeNotRestricted(p)
                 }
             }
 
@@ -276,7 +276,7 @@ class ChunkCommand(
         val claim = registry.getAt(p.location)
         val l = limits.getLimits(p)
         if (claim != null || registry.getOwnedChunks(p.uniqueId) >= l.maxChunks) return false
-        return !service.isNewClaim(p) || registry.getOwnedClaimsCount(p.uniqueId) < l.maxClaims
+        return !ClaimService.isNewClaim(registry.getAll(), p.uniqueId, p.location) || registry.getOwnedClaimsCount(p.uniqueId) < l.maxClaims
     }
 
     private fun showCannotClaim(p: Player, claim: Claim?) {
@@ -284,7 +284,7 @@ class ChunkCommand(
             val ownerName = Bukkit.getOfflinePlayer(claim.owner).name ?: "Unknown"
             Dialogs.chunkClaimed(p, ownerName)
         } else {
-            Dialogs.cannotClaim(p, registry.getOwnedChunks(p.uniqueId), registry.getOwnedClaimsCount(p.uniqueId), limits.getLimits(p), service.isNewClaim(p))
+            Dialogs.cannotClaim(p, registry.getOwnedChunks(p.uniqueId), registry.getOwnedClaimsCount(p.uniqueId), limits.getLimits(p), ClaimService.isNewClaim(registry.getAll(), p.uniqueId, p.location))
         }
     }
 

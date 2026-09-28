@@ -64,8 +64,6 @@ class InteractProtectionListener(
             if (claim.blockActions == "never") {
                 event.setUseInteractedBlock(Event.Result.DENY)
 
-                event.setUseInteractedBlock(Event.Result.DENY)
-
                 // Cancel physical actions like trampling or pressure plates
                 if (event.action == Action.PHYSICAL) {
                     event.isCancelled = true

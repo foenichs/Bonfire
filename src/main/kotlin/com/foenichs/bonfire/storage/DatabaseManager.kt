@@ -16,6 +16,7 @@ class DatabaseManager(dataFolder: File) {
     init {
         if (!dataFolder.exists()) dataFolder.mkdirs()
         val s = connection.createStatement()
+        s.execute("PRAGMA foreign_keys = ON")
         s.execute("CREATE TABLE IF NOT EXISTS bonfire_metadata (meta_key TEXT PRIMARY KEY, meta_value TEXT)")
         s.execute("CREATE TABLE IF NOT EXISTS claims (id INTEGER PRIMARY KEY AUTOINCREMENT, owner_uuid TEXT NOT NULL, block_actions TEXT DEFAULT 'never', entity_actions TEXT DEFAULT 'never')")
         s.execute("CREATE TABLE IF NOT EXISTS claim_chunks (claim_id INTEGER, world_uuid TEXT NOT NULL, chunk_key INTEGER NOT NULL, layer TEXT NOT NULL DEFAULT 'GROUND', FOREIGN KEY(claim_id) REFERENCES claims(id) ON DELETE CASCADE)")

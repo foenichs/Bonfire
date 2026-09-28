@@ -186,6 +186,12 @@ object Dialogs {
             .append(Component.text(" If you're stuck in a claim, please contact a server operator.", NamedTextColor.GRAY))))
     }
 
+    fun escapeNotRestricted(viewer: Player) {
+        viewer.showDialog(errorDialog(
+            Component.text("Escaping only works if the claim you're currently in prevents block or entity actions.")
+        ))
+    }
+
     fun claimRulesDialog(viewer: Player, onSelectRule: (String) -> Unit) {
         val dialog = Dialog.create { b ->
             b.empty().base(
