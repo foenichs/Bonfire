@@ -134,10 +134,10 @@ object Dialogs {
                     .build()
             ).type(
                 DialogType.multiAction(listOf(
+                    ActionButton.create(Component.text("Cancel"), null, 75, DialogAction.customClick({ _, _ -> }, ClickCallback.Options.builder().uses(1).build())),
                     ActionButton.create(Component.text("Merge"), null, 75, DialogAction.customClick({ _, _ ->
                         onConfirm()
-                    }, ClickCallback.Options.builder().uses(1).build())),
-                    ActionButton.create(Component.text("Cancel"), null, 75, DialogAction.customClick({ _, _ -> }, ClickCallback.Options.builder().uses(1).build()))
+                    }, ClickCallback.Options.builder().uses(1).build()))
                 )).build()
             )
         }
@@ -279,11 +279,11 @@ object Dialogs {
                 .build()
         ).type(
             DialogType.multiAction(listOf(
-                ActionButton.create(Component.text("Apply"), null, 60, DialogAction.customClick({ view, _ ->
-                    onApply(view.getText("chunks")?.toIntOrNull() ?: 0, view.getText("claims")?.toIntOrNull() ?: 0)
-                }, ClickCallback.Options.builder().uses(1).build())),
                 ActionButton.create(Component.text("Reset values"), null, 90, DialogAction.customClick({ _, audience ->
                     audience.showDialog(overrideLimitsDialog(viewer, nameComponent, 0, 0, onApply))
+                }, ClickCallback.Options.builder().uses(1).build())),
+                ActionButton.create(Component.text("Apply"), null, 60, DialogAction.customClick({ view, _ ->
+                    onApply(view.getText("chunks")?.toIntOrNull() ?: 0, view.getText("claims")?.toIntOrNull() ?: 0)
                 }, ClickCallback.Options.builder().uses(1).build()))
             )).build()
         )
