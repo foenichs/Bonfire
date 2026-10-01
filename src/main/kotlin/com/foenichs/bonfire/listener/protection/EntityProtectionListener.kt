@@ -5,6 +5,7 @@ import com.foenichs.bonfire.Bonfire
 import com.foenichs.bonfire.service.ProtectionService
 import com.foenichs.bonfire.service.VisualService
 import com.foenichs.bonfire.storage.ClaimRegistry
+import io.papermc.paper.event.player.PlayerNameEntityEvent
 import org.bukkit.Bukkit
 import org.bukkit.Location
 import org.bukkit.Material
@@ -15,7 +16,9 @@ import org.bukkit.event.EventPriority
 import org.bukkit.event.Listener
 import org.bukkit.event.entity.EntityDamageByEntityEvent
 import org.bukkit.event.entity.EntityDamageEvent.DamageCause
+import org.bukkit.event.entity.EntityEnterLoveModeEvent
 import org.bukkit.event.entity.EntityPlaceEvent
+import org.bukkit.event.entity.EntityTargetEvent
 import org.bukkit.event.entity.EntityTargetLivingEntityEvent
 import org.bukkit.event.entity.PlayerLeashEntityEvent
 import org.bukkit.event.hanging.HangingBreakByEntityEvent
@@ -60,12 +63,9 @@ class EntityProtectionListener(
             }
             if (protection.ownsEntity(holder, mob)) continue
 
-            val mobLocation = mob.location
-            val mobClaim = registry.getAt(mobLocation)
-            if (mobClaim != null && protection.canBypass(holder, mobLocation) && !protection.isOrigin(mob, mobLocation)) {
-                protection.setOrigin(mob, mobClaim)
-            }
+            originTagFor(holder, mob)
 
+            val mobLocation = mob.location
             if (isLeashBlocked(holder, mob, holder.location) || isLeashBlocked(holder, mob, mobLocation)) {
                 mob.setLeashHolder(null)
                 mob.world.dropItemNaturally(mobLocation, ItemStack(Material.LEAD))
@@ -86,12 +86,19 @@ class EntityProtectionListener(
                 iterator.remove()
                 continue
             }
+            originTagFor(target, mob)
+        }
+    }
 
-            val location = mob.location
-            val claim = registry.getAt(location) ?: continue
-            if (protection.canBypass(target, location) && !protection.isOrigin(mob, location)) {
-                protection.setOrigin(mob, claim)
-            }
+    /**
+     * Origin-tags a mob if the player is authorized in its claim
+     */
+    private fun originTagFor(player: Player, entity: Entity) {
+        if (entity !is Mob) return
+        val location = entity.location
+        val claim = registry.getAt(location) ?: return
+        if (protection.canBypass(player, location) && !protection.isOrigin(entity, location)) {
+            protection.setOrigin(entity, claim)
         }
     }
 
@@ -153,12 +160,16 @@ class EntityProtectionListener(
     }
 
     /**
-     * Tracks mobs targeting players
+     * Tracks mobs targeting players and origin-tags tempted ones
      */
     @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
     fun onPlayerTargeted(event: EntityTargetLivingEntityEvent) {
         val mob = event.entity as? Mob ?: return
-        if (event.target is Player) targetingMobs.add(mob.uniqueId)
+        val player = event.target as? Player ?: return
+
+        // Tempting doesn't set the target, but fires this event every tick while following
+        if (event.reason == EntityTargetEvent.TargetReason.TEMPT) originTagFor(player, mob)
+        else targetingMobs.add(mob.uniqueId)
     }
 
     /**
@@ -194,6 +205,23 @@ class EntityProtectionListener(
         val mob = event.entity as? Mob ?: return
         if (event.leashHolder !is Player) return
         leashedMobs.add(mob.uniqueId)
+    }
+
+    /**
+     * Origin-tags animals fed by authorized players
+     */
+    @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
+    fun onEnterLoveMode(event: EntityEnterLoveModeEvent) {
+        val player = event.humanEntity as? Player ?: return
+        originTagFor(player, event.entity)
+    }
+
+    /**
+     * Origin-tags mobs named by authorized players
+     */
+    @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
+    fun onEntityName(event: PlayerNameEntityEvent) {
+        originTagFor(event.player, event.entity)
     }
 
     /**
