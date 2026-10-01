@@ -149,11 +149,13 @@ class MigrationService(
 
         if (isFresh) {
             db.setMetadata("data_version", requiredDataVersion)
-        } else if (currentVersion == null || isNewerThan(currentVersion)) {
+        } else if (isOlderThan(currentVersion, requiredDataVersion)) {
             migrateDatabase(db)
-            deleteOrphanedRows()
-            db.fillMigrationQueue()
-            mergeNetherRoofClaims()
+            if (isOlderThan(currentVersion, "1.6.0")) {
+                deleteOrphanedRows()
+                db.fillMigrationQueue()
+                mergeNetherRoofClaims()
+            }
             db.setMetadata("data_version", requiredDataVersion)
         }
 
@@ -170,16 +172,9 @@ class MigrationService(
         val chunkKey = chunk.chunkKey
 
         chunk.entities.forEach { entity ->
-            if (entity is Vehicle || entity is FallingBlock || entity is Snowman || entity is ArmorStand) {
+            if (entity is Vehicle || entity is FallingBlock || entity is ArmorStand || entity is Mob) {
                 val claim = registry.getAt(entity.location) ?: return@forEach
-                if (!protection.isOrigin(entity, entity.location)) {
-                    // Remove stale origin tags
-                    val tagsToRemove = entity.scoreboardTags.filter { it.startsWith("bonfire_origin_") }
-                    tagsToRemove.forEach { entity.removeScoreboardTag(it) }
-
-                    // Apply valid tag
-                    entity.addScoreboardTag("bonfire_origin_${claim.id}")
-                }
+                if (!protection.isOrigin(entity, entity.location)) protection.setOrigin(entity, claim)
             }
         }
 
@@ -234,11 +229,12 @@ class MigrationService(
     }
 
     /**
-     * Checks if the required version is newer than the current database version
+     * Checks if a data version predates the target, treating none as oldest
      */
-    private fun isNewerThan(current: String): Boolean {
+    private fun isOlderThan(current: String?, target: String): Boolean {
+        if (current == null) return true
         val numRegex = "\\d+".toRegex()
-        val req = numRegex.findAll(requiredDataVersion).map { it.value.toInt() }.toList()
+        val req = numRegex.findAll(target).map { it.value.toInt() }.toList()
         val curr = numRegex.findAll(current).map { it.value.toInt() }.toList()
 
         for (i in 0 until maxOf(req.size, curr.size)) {

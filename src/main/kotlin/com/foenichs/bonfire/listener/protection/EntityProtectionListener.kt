@@ -17,6 +17,7 @@ import org.bukkit.event.entity.EntityDamageByEntityEvent
 import org.bukkit.event.entity.EntityDamageEvent.DamageCause
 import org.bukkit.event.entity.EntityPlaceEvent
 import org.bukkit.event.entity.EntityTargetLivingEntityEvent
+import org.bukkit.event.entity.PlayerLeashEntityEvent
 import org.bukkit.event.hanging.HangingBreakByEntityEvent
 import org.bukkit.event.player.PlayerEggThrowEvent
 import org.bukkit.event.player.PlayerInteractAtEntityEvent
@@ -26,6 +27,7 @@ import org.bukkit.event.vehicle.VehicleDamageEvent
 import org.bukkit.event.vehicle.VehicleDestroyEvent
 import org.bukkit.event.vehicle.VehicleExitEvent
 import org.bukkit.inventory.ItemStack
+import java.util.UUID
 
 class EntityProtectionListener(
     private val plugin: Bonfire,
@@ -33,6 +35,73 @@ class EntityProtectionListener(
     private val protection: ProtectionService,
     private val visualService: VisualService
 ) : Listener {
+
+    private val leashedMobs = mutableSetOf<UUID>()
+    private val targetingMobs = mutableSetOf<UUID>()
+
+    init {
+        Bukkit.getScheduler().runTaskTimer(plugin, Runnable {
+            checkLeashedMobs()
+            checkTargetingMobs()
+        }, 1L, 1L)
+    }
+
+    /**
+     * Origin-tags or unleashes mobs led into claims
+     */
+    private fun checkLeashedMobs() {
+        val iterator = leashedMobs.iterator()
+        while (iterator.hasNext()) {
+            val mob = Bukkit.getEntity(iterator.next()) as? Mob
+            val holder = mob?.takeIf { it.isValid && it.isLeashed }?.leashHolder as? Player
+            if (mob == null || holder == null) {
+                iterator.remove()
+                continue
+            }
+            if (protection.ownsEntity(holder, mob)) continue
+
+            val mobLocation = mob.location
+            val mobClaim = registry.getAt(mobLocation)
+            if (mobClaim != null && protection.canBypass(holder, mobLocation) && !protection.isOrigin(mob, mobLocation)) {
+                protection.setOrigin(mob, mobClaim)
+            }
+
+            if (isLeashBlocked(holder, mob, holder.location) || isLeashBlocked(holder, mob, mobLocation)) {
+                mob.setLeashHolder(null)
+                mob.world.dropItemNaturally(mobLocation, ItemStack(Material.LEAD))
+                iterator.remove()
+            }
+        }
+    }
+
+    /**
+     * Origin-tags mobs chasing authorized players into claims
+     */
+    private fun checkTargetingMobs() {
+        val iterator = targetingMobs.iterator()
+        while (iterator.hasNext()) {
+            val mob = Bukkit.getEntity(iterator.next()) as? Mob
+            val target = mob?.takeIf { it.isValid }?.target as? Player
+            if (mob == null || target == null) {
+                iterator.remove()
+                continue
+            }
+
+            val location = mob.location
+            val claim = registry.getAt(location) ?: continue
+            if (protection.canBypass(target, location) && !protection.isOrigin(mob, location)) {
+                protection.setOrigin(mob, claim)
+            }
+        }
+    }
+
+    /**
+     * Checks if a holder can't lead a mob into a claim
+     */
+    private fun isLeashBlocked(holder: Player, mob: Mob, location: Location): Boolean {
+        val claim = registry.getAt(location) ?: return false
+        return claim.entityActions != "always" && !protection.canBypass(holder, location) && !protection.isOrigin(mob, location)
+    }
 
     /**
      * Apply attribute exceptions
@@ -84,6 +153,50 @@ class EntityProtectionListener(
     }
 
     /**
+     * Tracks mobs targeting players
+     */
+    @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
+    fun onPlayerTargeted(event: EntityTargetLivingEntityEvent) {
+        val mob = event.entity as? Mob ?: return
+        if (event.target is Player) targetingMobs.add(mob.uniqueId)
+    }
+
+    /**
+     * Leashing entities
+     */
+    @EventHandler(priority = EventPriority.LOWEST, ignoreCancelled = true)
+    fun onLeash(event: PlayerLeashEntityEvent) {
+        val player = event.player
+        val entity = event.entity
+
+        // Authorized players and pet owners are not restricted
+        if (protection.ownsEntity(player, entity)) return
+
+        // Holder stands in a claim the mob can't be led into
+        if (event.leashHolder is Player && entity is Mob && isLeashBlocked(player, entity, player.location)) {
+            event.isCancelled = true
+            return
+        }
+
+        if (protection.canBypass(player, entity.location)) return
+
+        val claim = registry.getAt(entity.location) ?: return
+        if (claim.entityActions != "always") {
+            event.isCancelled = true
+        }
+    }
+
+    /**
+     * Tracks mobs leashed by players
+     */
+    @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
+    fun onPlayerLeash(event: PlayerLeashEntityEvent) {
+        val mob = event.entity as? Mob ?: return
+        if (event.leashHolder !is Player) return
+        leashedMobs.add(mob.uniqueId)
+    }
+
+    /**
      * Breaking item frames, paintings, or leash knots
      */
     @EventHandler(priority = EventPriority.LOWEST, ignoreCancelled = true)
@@ -108,7 +221,8 @@ class EntityProtectionListener(
         // Resolve the responsible player (damager)
         val damager = when (val attacker = event.damager) {
             is Player -> attacker
-            is Projectile -> attacker.shooter as? Player
+            is Tameable -> attacker.owner as? Player
+            is Projectile -> (attacker.shooter as? Player) ?: ((attacker.shooter as? Tameable)?.owner as? Player)
             is TNTPrimed -> attacker.source as? Player
             is Creeper -> (attacker.igniter as? Player) ?: (attacker.target as? Player)
             else -> null
@@ -132,6 +246,10 @@ class EntityProtectionListener(
                 return
             }
 
+            // Origin-tagged mobs may act within their claim
+            val mobAttacker = (event.damager as? Mob) ?: ((event.damager as? Projectile)?.shooter as? Mob)
+            if (damager == null && victim !is Player && mobAttacker != null && protection.isOrigin(mobAttacker, victimLocation)) return
+
             event.isCancelled = true
         }
     }
@@ -148,7 +266,8 @@ class EntityProtectionListener(
         // Responsible player
         val damager = when (val source = event.hitBy) {
             is Player -> source
-            is Projectile -> source.shooter as? Player
+            is Tameable -> source.owner as? Player
+            is Projectile -> (source.shooter as? Player) ?: ((source.shooter as? Tameable)?.owner as? Player)
             else -> null
         }
 
@@ -161,6 +280,10 @@ class EntityProtectionListener(
         if (claim.entityActions != "always") {
             // Allow if the damager owns the victim
             if (damager != null && protection.ownsEntity(damager, victim)) return
+
+            // Origin-tagged mobs may act within their claim
+            val mobAttacker = (event.hitBy as? Mob) ?: ((event.hitBy as? Projectile)?.shooter as? Mob)
+            if (damager == null && victim !is Player && mobAttacker != null && protection.isOrigin(mobAttacker, victimLocation)) return
 
             event.isCancelled = true
         }
@@ -229,7 +352,7 @@ class EntityProtectionListener(
     }
 
     /**
-     * Helper logic for vehicle protection
+     * Checks if an attacker can't damage vehicles at a location
      */
     private fun isVehicleActionBlocked(attacker: Entity, location: Location): Boolean {
         val player = when (attacker) {

@@ -1,5 +1,6 @@
 package com.foenichs.bonfire.service
 
+import com.foenichs.bonfire.model.Claim
 import com.foenichs.bonfire.storage.ClaimRegistry
 import org.bukkit.Bukkit
 import org.bukkit.GameMode
@@ -41,6 +42,14 @@ class ProtectionService(private val registry: ClaimRegistry) {
 
         // Any of the legacy IDs
         return claim.legacyIds.any { legacyId -> tags.contains("bonfire_origin_$legacyId") }
+    }
+
+    /**
+     * Replaces any origin tags of the entity with the given claim's
+     */
+    fun setOrigin(entity: Entity, claim: Claim) {
+        entity.scoreboardTags.filter { it.startsWith("bonfire_origin_") }.forEach { entity.removeScoreboardTag(it) }
+        entity.addScoreboardTag("bonfire_origin_${claim.id}")
     }
 
     /**

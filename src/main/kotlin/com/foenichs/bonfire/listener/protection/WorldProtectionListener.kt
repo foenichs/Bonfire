@@ -57,10 +57,15 @@ class WorldProtectionListener(
         if (from.chunk == to.chunk && ChunkPos.layerFor(from) == ChunkPos.layerFor(to)) return
 
         val claim = registry.getAt(to) ?: return
-        if (claim.entityActions == "always" || protection.isOrigin(vehicle, to)) return
-
         val passengers = vehicle.passengers
-        if (passengers.any { it is Player && protection.canBypass(it, to) }) return
+
+        // Origin-tag mobs brought along by authorized riders
+        if (passengers.any { it is Player && protection.canBypass(it, to) }) {
+            passengers.filterIsInstance<Mob>().filter { !protection.isOrigin(it, to) }.forEach { protection.setOrigin(it, claim) }
+            return
+        }
+
+        if (claim.entityActions == "always" || protection.isOrigin(vehicle, to)) return
         if (passengers.any { it is Player } && passengers.none { it !is Player }) return
 
         val material = when (vehicle) {
@@ -174,12 +179,12 @@ class WorldProtectionListener(
     }
 
     /**
-     * Tags Snowman, ArmorStand and FallingBlock when they spawn inside a claim
+     * Tags Mobs, ArmorStand and FallingBlock when they spawn inside a claim
      */
     @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
     fun onEntitySpawn(event: EntitySpawnEvent) {
         val entity = event.entity
-        if (entity !is Snowman && entity !is ArmorStand && entity !is FallingBlock) return
+        if (entity !is Mob && entity !is ArmorStand && entity !is FallingBlock) return
 
         val claim = registry.getAt(event.location)
         if (claim != null) {
