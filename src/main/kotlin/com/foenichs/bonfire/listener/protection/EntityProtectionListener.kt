@@ -21,7 +21,6 @@ import org.bukkit.event.entity.EntityPlaceEvent
 import org.bukkit.event.entity.EntityTargetEvent
 import org.bukkit.event.entity.EntityTargetLivingEntityEvent
 import org.bukkit.event.entity.PlayerLeashEntityEvent
-import org.bukkit.event.hanging.HangingBreakByEntityEvent
 import org.bukkit.event.player.PlayerEggThrowEvent
 import org.bukkit.event.player.PlayerInteractAtEntityEvent
 import org.bukkit.event.player.PlayerInteractEntityEvent
@@ -242,19 +241,6 @@ class EntityProtectionListener(
     @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
     fun onEntityName(event: PlayerNameEntityEvent) {
         originTagFor(event.player, event.entity)
-    }
-
-    /**
-     * Breaking item frames, paintings, or leash knots
-     */
-    @EventHandler(priority = EventPriority.LOWEST, ignoreCancelled = true)
-    fun onHangingBreak(event: HangingBreakByEntityEvent) {
-        val remover = event.remover as? Player ?: return
-
-        // Authorized players can break these normally
-        if (protection.canBypass(remover, event.entity.location)) return
-
-        event.isCancelled = true
     }
 
     /**

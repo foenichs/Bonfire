@@ -11,6 +11,9 @@ import org.bukkit.event.Listener
 import org.bukkit.event.block.BlockBreakEvent
 import org.bukkit.event.block.BlockPlaceEvent
 import org.bukkit.event.entity.ProjectileHitEvent
+import org.bukkit.event.hanging.HangingBreakByEntityEvent
+import org.bukkit.event.hanging.HangingBreakEvent
+import org.bukkit.event.hanging.HangingPlaceEvent
 import org.bukkit.event.player.PlayerBucketEmptyEvent
 import org.bukkit.event.player.PlayerBucketFillEvent
 
@@ -64,6 +67,36 @@ class BlockProtectionListener(
     @EventHandler(priority = EventPriority.LOWEST, ignoreCancelled = true)
     fun onBucketFill(event: PlayerBucketFillEvent) {
         if (isActionBlocked(event.player, event.block.location)) {
+            event.isCancelled = true
+        }
+    }
+
+    /**
+     * Breaking item frames, paintings, or leash knots
+     */
+    @EventHandler(priority = EventPriority.LOWEST, ignoreCancelled = true)
+    fun onHangingBreak(event: HangingBreakEvent) {
+        val location = event.entity.location
+
+        if (event.cause == HangingBreakEvent.RemoveCause.EXPLOSION) {
+            val source = (event as? HangingBreakByEntityEvent)?.damageSource?.directEntity
+            if (protection.isExplosionBlocked(source, location)) event.isCancelled = true
+            return
+        }
+
+        val remover = (event as? HangingBreakByEntityEvent)?.remover as? Player ?: return
+        if (isActionBlocked(remover, location)) {
+            event.isCancelled = true
+        }
+    }
+
+    /**
+     * Placing item frames, paintings, or leash knots
+     */
+    @EventHandler(priority = EventPriority.LOWEST, ignoreCancelled = true)
+    fun onHangingPlace(event: HangingPlaceEvent) {
+        val player = event.player ?: return
+        if (isActionBlocked(player, event.entity.location)) {
             event.isCancelled = true
         }
     }

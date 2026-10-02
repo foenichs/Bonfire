@@ -6,8 +6,11 @@ import org.bukkit.Bukkit
 import org.bukkit.GameMode
 import org.bukkit.Location
 import org.bukkit.entity.AbstractHorse
+import org.bukkit.entity.Creeper
 import org.bukkit.entity.Entity
 import org.bukkit.entity.Player
+import org.bukkit.entity.Projectile
+import org.bukkit.entity.TNTPrimed
 import org.bukkit.entity.Tameable
 
 class ProtectionService(private val registry: ClaimRegistry) {
@@ -80,6 +83,30 @@ class ProtectionService(private val registry: ClaimRegistry) {
         }
 
         return false
+    }
+
+    /**
+     * Checks if an explosion can't affect blocks or hanging entities at a location
+     */
+    fun isExplosionBlocked(source: Entity?, location: Location): Boolean {
+        val claim = registry.getAt(location) ?: return false
+
+        // TNT ignited by a player follows that player's permissions
+        val igniter = (source as? TNTPrimed)?.source as? Player
+        if (igniter != null) return !canBypass(igniter, location)
+
+        // TNT can destroy blocks in the claim it was created in
+        if (source is TNTPrimed && isOrigin(source, location)) return false
+
+        // Creeper targeting a trusted player
+        if (source is Creeper) {
+            val target = source.target as? Player
+            return !(target != null && canBypass(target, location)) && claim.blockActions != "always"
+        }
+
+        // Wind charge thrown by a trusted player bypasses rules
+        val shooter = (source as? Projectile)?.shooter as? Player
+        return !(shooter != null && canBypass(shooter, location)) && claim.blockActions != "always"
     }
 
     /**
