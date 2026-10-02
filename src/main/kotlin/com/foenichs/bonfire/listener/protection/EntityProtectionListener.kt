@@ -26,6 +26,7 @@ import org.bukkit.event.player.PlayerEggThrowEvent
 import org.bukkit.event.player.PlayerInteractAtEntityEvent
 import org.bukkit.event.player.PlayerInteractEntityEvent
 import org.bukkit.event.player.PlayerMoveEvent
+import org.bukkit.event.player.PlayerUnleashEntityEvent
 import org.bukkit.event.vehicle.VehicleDamageEvent
 import org.bukkit.event.vehicle.VehicleDestroyEvent
 import org.bukkit.event.vehicle.VehicleExitEvent
@@ -189,6 +190,25 @@ class EntityProtectionListener(
             return
         }
 
+        if (protection.canBypass(player, entity.location)) return
+
+        val claim = registry.getAt(entity.location) ?: return
+        if (claim.entityActions != "always") {
+            event.isCancelled = true
+        }
+    }
+
+    /**
+     * Unleashing entities
+     */
+    @EventHandler(priority = EventPriority.LOWEST, ignoreCancelled = true)
+    fun onUnleash(event: PlayerUnleashEntityEvent) {
+        val player = event.player
+        val entity = event.entity
+
+        // Ignore pet owners, the lead's holder and authorized players
+        if (protection.ownsEntity(player, entity)) return
+        if ((entity as? LivingEntity)?.takeIf { it.isLeashed }?.leashHolder == player) return
         if (protection.canBypass(player, entity.location)) return
 
         val claim = registry.getAt(entity.location) ?: return
@@ -409,7 +429,7 @@ class EntityProtectionListener(
             if (!protection.isOrigin(vehicle, location)) {
                 val material = when (vehicle) {
                     is Boat -> vehicle.boatMaterial
-                    is Minecart -> Material.MINECART
+                    is Minecart -> vehicle.minecartMaterial
                     else -> return
                 }
 

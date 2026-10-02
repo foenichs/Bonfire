@@ -70,7 +70,7 @@ class WorldProtectionListener(
 
         val material = when (vehicle) {
             is Boat -> vehicle.boatMaterial
-            is Minecart -> Material.MINECART
+            is Minecart -> vehicle.minecartMaterial
             else -> return
         }
         vehicle.world.dropItemNaturally(vehicle.location, ItemStack(material))

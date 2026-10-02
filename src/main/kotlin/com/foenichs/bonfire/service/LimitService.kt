@@ -24,13 +24,24 @@ class LimitService(private var config: FileConfiguration, private val db: Databa
     }
 
     fun getLimits(p: Player): Limits {
-        if (!config.getBoolean("limits.enabled", true)) return Limits(Int.MAX_VALUE, Int.MAX_VALUE, null, null, false, false, false, false, Int.MAX_VALUE, Int.MAX_VALUE, Int.MAX_VALUE, Int.MAX_VALUE)
+        if (!config.getBoolean("limits.enabled", true)) return Limits(
+            maxChunks = Int.MAX_VALUE, maxClaims = Int.MAX_VALUE,
+            minutesToNextChunk = null, minutesToNextClaim = null,
+            chunksCapped = false, claimsCapped = false,
+            chunksAtCap = false, claimsAtCap = false,
+            baseChunks = Int.MAX_VALUE, baseClaims = Int.MAX_VALUE,
+            multipliedChunks = Int.MAX_VALUE, multipliedClaims = Int.MAX_VALUE
+        )
         val mins = p.getStatistic(Statistic.PLAY_ONE_MINUTE) / 1200
         val earningEnabled = config.getBoolean("limits.playtime-earning.enabled", true)
         val minsPerChunk = config.getInt("limits.playtime-earning.minutes-per-chunk", 60)
         val minsPerClaim = config.getInt("limits.playtime-earning.minutes-per-claim", 1440)
-        val earnedCh = if (earningEnabled) mins / minsPerChunk else 0
-        val earnedCl = if (earningEnabled) mins / minsPerClaim else 0
+
+        // Value 0 disables playtime earning
+        val earningChunks = earningEnabled && minsPerChunk > 0
+        val earningClaims = earningEnabled && minsPerClaim > 0
+        val earnedCh = if (earningChunks) mins / minsPerChunk else 0
+        val earnedCl = if (earningClaims) mins / minsPerClaim else 0
         val fCh = config.getInt("limits.starting-values.chunks", 0) + earnedCh
         val fCl = config.getInt("limits.starting-values.claims", 1) + earnedCl
         val mCh = config.getInt("limits.maximum.chunks", -1)
@@ -41,8 +52,8 @@ class LimitService(private var config: FileConfiguration, private val db: Databa
         val claimsCapped = mCl != -1
         val baseCh = if (chunksCapped) fCh.coerceAtMost(mCh) else fCh
         val baseCl = if (claimsCapped) fCl.coerceAtMost(mCl) else fCl
-        val nextChunk = if (earningEnabled && (!chunksCapped || fCh < mCh)) minsPerChunk - mins % minsPerChunk else null
-        val nextClaim = if (earningEnabled && (!claimsCapped || fCl < mCl)) minsPerClaim - mins % minsPerClaim else null
+        val nextChunk = if (earningChunks && (!chunksCapped || fCh < mCh)) minsPerChunk - mins % minsPerChunk else null
+        val nextClaim = if (earningClaims && (!claimsCapped || fCl < mCl)) minsPerClaim - mins % minsPerClaim else null
 
         val multiplier = playtimeMultiplier(p)
         val multipliedCh = multiplier?.let { (baseCh * it).toInt().let { v -> if (chunksCapped) v.coerceAtMost(mCh) else v } } ?: baseCh

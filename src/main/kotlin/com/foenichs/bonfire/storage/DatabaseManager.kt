@@ -5,13 +5,14 @@ import com.foenichs.bonfire.model.ChunkPos
 import com.foenichs.bonfire.model.Claim
 import com.foenichs.bonfire.service.MigrationService
 import java.io.File
+import java.sql.Connection
 import java.sql.DriverManager
 import java.sql.SQLException
 import java.sql.Statement
 import java.util.UUID
 
 class DatabaseManager(dataFolder: File) {
-    val connection = DriverManager.getConnection("jdbc:sqlite:${dataFolder.path}/claims.db")
+    val connection: Connection = DriverManager.getConnection("jdbc:sqlite:${dataFolder.path}/claims.db")
 
     init {
         if (!dataFolder.exists()) dataFolder.mkdirs()
@@ -23,6 +24,7 @@ class DatabaseManager(dataFolder: File) {
         s.execute("CREATE TABLE IF NOT EXISTS trusted_players (claim_id INTEGER, player_uuid TEXT NOT NULL, trust_type TEXT NOT NULL, FOREIGN KEY(claim_id) REFERENCES claims(id) ON DELETE CASCADE)")
         s.execute("CREATE TABLE IF NOT EXISTS claim_aliases (claim_id INTEGER, legacy_id INTEGER, FOREIGN KEY(claim_id) REFERENCES claims(id) ON DELETE CASCADE)")
         s.execute("CREATE TABLE IF NOT EXISTS migration_queue (world_uuid TEXT NOT NULL, chunk_key INTEGER NOT NULL)")
+        s.execute("CREATE INDEX IF NOT EXISTS idx_migration_queue ON migration_queue (world_uuid, chunk_key)")
         s.execute("CREATE TABLE IF NOT EXISTS limit_overrides (player_uuid TEXT PRIMARY KEY, extra_chunks INTEGER NOT NULL DEFAULT 0, extra_claims INTEGER NOT NULL DEFAULT 0)")
     }
 
