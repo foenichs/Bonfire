@@ -8,6 +8,9 @@ import org.bukkit.Location
 import org.bukkit.entity.AbstractHorse
 import org.bukkit.entity.Creeper
 import org.bukkit.entity.Entity
+import org.bukkit.entity.EntityType
+import org.bukkit.entity.Hanging
+import org.bukkit.entity.LeashHitch
 import org.bukkit.entity.Player
 import org.bukkit.entity.Projectile
 import org.bukkit.entity.TNTPrimed
@@ -56,6 +59,12 @@ class ProtectionService(private val registry: ClaimRegistry) {
     }
 
     /**
+     * Checks if an entity is handled as a block (cushions, item frames, paintings)
+     */
+    fun isBlockRuled(entity: Entity) = (entity is Hanging && entity !is LeashHitch) ||
+            (entity.type != EntityType.UNKNOWN && entity.type.key.key == "cushion")
+
+    /**
      * Checks if a player is the owner of a tamed entity
      */
     fun ownsEntity(player: Player, entity: Entity): Boolean {
@@ -88,7 +97,7 @@ class ProtectionService(private val registry: ClaimRegistry) {
     /**
      * Checks if an explosion can't affect blocks or hanging entities at a location
      */
-    fun isExplosionBlocked(source: Entity?, location: Location): Boolean {
+    fun isExplosionBlocked(source: Entity?, location: Location, rule: (Claim) -> String = { it.blockActions }): Boolean {
         val claim = registry.getAt(location) ?: return false
 
         // TNT ignited by a player follows that player's permissions
@@ -101,12 +110,12 @@ class ProtectionService(private val registry: ClaimRegistry) {
         // Creeper targeting a trusted player
         if (source is Creeper) {
             val target = source.target as? Player
-            return !(target != null && canBypass(target, location)) && claim.blockActions != "always"
+            return !(target != null && canBypass(target, location)) && rule(claim) != "always"
         }
 
         // Wind charge thrown by a trusted player bypasses rules
         val shooter = (source as? Projectile)?.shooter as? Player
-        return !(shooter != null && canBypass(shooter, location)) && claim.blockActions != "always"
+        return !(shooter != null && canBypass(shooter, location)) && rule(claim) != "always"
     }
 
     /**

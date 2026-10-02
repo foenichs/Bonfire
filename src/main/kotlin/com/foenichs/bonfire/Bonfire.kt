@@ -101,7 +101,9 @@ class Bonfire : JavaPlugin() {
         pluginManager.registerEvents(playerListener, this)
 
         // Rule Enforcement
-        pluginManager.registerEvents(BlockProtectionListener(registry, protectionService), this)
+        val blockProtectionListener = BlockProtectionListener(registry, protectionService)
+        pluginManager.registerEvents(blockProtectionListener, this)
+        blockProtectionListener.registerCushionBreaks(this)
         pluginManager.registerEvents(WorldProtectionListener(this, registry, protectionService), this)
         pluginManager.registerEvents(PistonProtectionListener(protectionService), this)
         pluginManager.registerEvents(ExplosionProtectionListener(registry, protectionService), this)

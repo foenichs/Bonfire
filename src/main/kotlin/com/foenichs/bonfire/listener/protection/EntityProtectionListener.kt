@@ -135,7 +135,10 @@ class EntityProtectionListener(
         val target = player.getTargetEntity(5)
         val isPet = target != null && protection.ownsEntity(player, target)
 
-        if (isPet) {
+        // Cushions, item frames and paintings are handled as blocks
+        val isBlockRuled = target != null && claim.blockActions != "never" && protection.isBlockRuled(target)
+
+        if (isPet || isBlockRuled) {
             visualService.setEntityException(player, location)
         } else {
             visualService.clearEntityException(player, location)
@@ -262,6 +265,17 @@ class EntityProtectionListener(
             else -> null
         }
 
+        // Item frames are handled as blocks
+        if (protection.isBlockRuled(victim)) {
+            val blocked = if (event.cause == DamageCause.ENTITY_EXPLOSION || event.cause == DamageCause.BLOCK_EXPLOSION) {
+                protection.isExplosionBlocked(event.damager, victimLocation)
+            } else {
+                damager != null && !protection.canBypass(damager, victimLocation) && claim.blockActions == "never"
+            }
+            if (blocked) event.isCancelled = true
+            return
+        }
+
         // Authorized damagers can always deal damage
         if (damager != null && protection.canBypass(damager, victimLocation)) return
 
@@ -342,7 +356,8 @@ class EntityProtectionListener(
         if (protection.canBypass(player, entity.location)) return
 
         val claim = registry.getAt(entity.location) ?: return
-        if (claim.entityActions == "never") {
+        val rule = if (protection.isBlockRuled(entity)) claim.blockActions else claim.entityActions
+        if (rule == "never") {
             event.isCancelled = true
         }
     }
@@ -358,7 +373,8 @@ class EntityProtectionListener(
         if (protection.canBypass(player, location)) return
 
         val claim = registry.getAt(location) ?: return
-        if (claim.entityActions != "always") {
+        val rule = if (protection.isBlockRuled(event.entity)) claim.blockActions else claim.entityActions
+        if (rule != "always") {
             event.isCancelled = true
         }
     }
