@@ -16,7 +16,7 @@ import io.papermc.paper.registry.data.dialog.action.DialogAction
 import io.papermc.paper.registry.data.dialog.body.DialogBody
 import io.papermc.paper.registry.data.dialog.type.DialogType
 import net.kyori.adventure.text.Component
-import net.kyori.adventure.text.event.ClickEvent
+import net.kyori.adventure.text.event.ClickCallback
 import net.kyori.adventure.text.format.NamedTextColor
 import net.kyori.adventure.text.format.TextDecoration
 import org.bukkit.Bukkit
@@ -232,8 +232,8 @@ class ChunkCommand(
                     .build()
             ).type(
                 DialogType.multiAction(listOf(
-                    ActionButton.create(Component.text("Always"), null, 60, DialogAction.staticAction(ClickEvent.runCommand("/chunk addplayer $target always"))),
-                    ActionButton.create(Component.text("While I'm online"), null, 100, DialogAction.staticAction(ClickEvent.runCommand("/chunk addplayer $target whileOnline")))
+                    ActionButton.create(Component.text("Always"), null, 60, DialogAction.customClick({ _, _ -> service.addTrust(p, target, "always") }, ClickCallback.Options.builder().uses(1).build())),
+                    ActionButton.create(Component.text("While I'm online"), null, 100, DialogAction.customClick({ _, _ -> service.addTrust(p, target, "whileOnline") }, ClickCallback.Options.builder().uses(1).build()))
                 )).build()
             )
         }
