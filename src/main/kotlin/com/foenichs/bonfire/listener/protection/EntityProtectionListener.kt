@@ -186,6 +186,9 @@ class EntityProtectionListener(
         // Authorized players and pet owners are not restricted
         if (protection.ownsEntity(player, entity)) return
 
+        // Origin-tagged mobs may be tied to fences in their claim
+        if (event.leashHolder !is Player && protection.isOrigin(entity, event.leashHolder.location)) return
+
         // Holder stands in a claim the mob can't be led into
         if (event.leashHolder is Player && entity is Mob && isLeashBlocked(player, entity, player.location)) {
             event.isCancelled = true

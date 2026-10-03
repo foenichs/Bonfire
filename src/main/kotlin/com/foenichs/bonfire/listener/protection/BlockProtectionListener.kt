@@ -9,6 +9,7 @@ import org.bukkit.Material
 import org.bukkit.damage.DamageSource
 import org.bukkit.entity.Hanging
 import org.bukkit.entity.LeashHitch
+import org.bukkit.entity.LivingEntity
 import org.bukkit.entity.Player
 import org.bukkit.event.Cancellable
 import org.bukkit.event.Event
@@ -124,9 +125,21 @@ class BlockProtectionListener(
     @EventHandler(priority = EventPriority.LOWEST, ignoreCancelled = true)
     fun onHangingPlace(event: HangingPlaceEvent) {
         val player = event.player ?: return
-        if (isActionBlocked(player, event.entity.location, hangingRule(event.entity))) {
+        val hanging = event.entity
+
+        // Leash knots for tying up mobs that are origin-tagged with this claim
+        if (hanging is LeashHitch && holdsOriginTaggedMob(player, hanging)) return
+
+        if (isActionBlocked(player, hanging.location, hangingRule(hanging))) {
             event.isCancelled = true
         }
+    }
+
+    /**
+     * Checks if a player leads a mob origin-tagged with the claim of a leash knot
+     */
+    private fun holdsOriginTaggedMob(player: Player, knot: LeashHitch) = knot.getNearbyEntities(16.0, 16.0, 16.0).any {
+        it is LivingEntity && it.isLeashed && it.leashHolder == player && protection.isOrigin(it, knot.location)
     }
 
     /**
