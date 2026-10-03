@@ -1,5 +1,6 @@
 package com.foenichs.bonfire.service
 
+import com.foenichs.bonfire.Bonfire
 import com.foenichs.bonfire.model.ChunkPos
 import com.foenichs.bonfire.model.Claim
 import com.foenichs.bonfire.storage.ClaimRegistry
@@ -7,20 +8,28 @@ import com.foenichs.bonfire.ui.Messenger
 import org.bukkit.Bukkit
 import org.bukkit.GameMode
 import org.bukkit.Location
+import org.bukkit.NamespacedKey
 import org.bukkit.attribute.Attribute
+import org.bukkit.attribute.AttributeModifier
 import org.bukkit.entity.Creeper
 import org.bukkit.entity.Mob
 import org.bukkit.entity.Player
+import org.bukkit.persistence.PersistentDataType
 import org.bukkit.scoreboard.Team
 import java.util.*
 
 class VisualService(
+    plugin: Bonfire,
     private val registry: ClaimRegistry,
     private val protection: ProtectionService,
     private val limits: LimitService,
     private val msg: Messenger,
     private val escape: EscapeService
 ) {
+    private val previousGameModeKey = NamespacedKey(plugin, "previous_gamemode")
+    private val blockReachKey = NamespacedKey(plugin, "block_reach")
+    private val entityReachKey = NamespacedKey(plugin, "entity_reach")
+
     private val lastOwners = mutableMapOf<UUID, UUID?>()
     private val lastCommandStates = mutableMapOf<UUID, CommandState>()
     private val entityException = mutableSetOf<UUID>()
@@ -103,14 +112,14 @@ class VisualService(
 
         // Apply block interaction logic
         if (claim.blockActions == "interactOnly") {
-            if (player.gameMode != GameMode.ADVENTURE) player.gameMode = GameMode.ADVENTURE
-            resetAttribute(player, Attribute.BLOCK_INTERACTION_RANGE)
+            enterAdventure(player)
+            allowReach(player, Attribute.BLOCK_INTERACTION_RANGE, blockReachKey)
         } else if (claim.blockActions == "never") {
-            if (player.gameMode == GameMode.ADVENTURE) player.gameMode = GameMode.SURVIVAL
-            player.getAttribute(Attribute.BLOCK_INTERACTION_RANGE)?.baseValue = 0.0
+            leaveAdventure(player)
+            restrictReach(player, Attribute.BLOCK_INTERACTION_RANGE, blockReachKey)
         } else {
-            if (player.gameMode == GameMode.ADVENTURE) player.gameMode = GameMode.SURVIVAL
-            resetAttribute(player, Attribute.BLOCK_INTERACTION_RANGE)
+            leaveAdventure(player)
+            allowReach(player, Attribute.BLOCK_INTERACTION_RANGE, blockReachKey)
         }
 
         // Apply entity interaction logic respecting entityException
@@ -119,24 +128,61 @@ class VisualService(
             "never" -> {
                 dropNearbyAggro(player)
                 if (entityException.contains(player.uniqueId)) {
-                    resetAttribute(player, Attribute.ENTITY_INTERACTION_RANGE)
+                    allowReach(player, Attribute.ENTITY_INTERACTION_RANGE, entityReachKey)
                 } else {
-                    player.getAttribute(Attribute.ENTITY_INTERACTION_RANGE)?.baseValue = 0.0
+                    restrictReach(player, Attribute.ENTITY_INTERACTION_RANGE, entityReachKey)
                 }
                 if (!noCollideTeam.hasEntry(player.name)) noCollideTeam.addEntry(player.name)
             }
 
             "interactOnly" -> {
                 dropNearbyAggro(player)
-                resetAttribute(player, Attribute.ENTITY_INTERACTION_RANGE)
+                allowReach(player, Attribute.ENTITY_INTERACTION_RANGE, entityReachKey)
                 if (!noCollideTeam.hasEntry(player.name)) noCollideTeam.addEntry(player.name)
             }
 
             else -> {
-                resetAttribute(player, Attribute.ENTITY_INTERACTION_RANGE)
+                allowReach(player, Attribute.ENTITY_INTERACTION_RANGE, entityReachKey)
                 if (noCollideTeam.hasEntry(player.name)) noCollideTeam.removeEntry(player.name)
             }
         }
+    }
+
+    /**
+     * Switches to adventure mode, remembering the previous game mode
+     */
+    private fun enterAdventure(player: Player) {
+        if (player.gameMode == GameMode.ADVENTURE) return
+        player.persistentDataContainer.set(previousGameModeKey, PersistentDataType.STRING, player.gameMode.name)
+        player.gameMode = GameMode.ADVENTURE
+    }
+
+    /**
+     * Restores the gamemode from before a claim switched to adventure mode
+     */
+    private fun leaveAdventure(player: Player) {
+        val previous = player.persistentDataContainer.get(previousGameModeKey, PersistentDataType.STRING) ?: return
+        player.persistentDataContainer.remove(previousGameModeKey)
+        if (player.gameMode == GameMode.ADVENTURE) {
+            player.gameMode = runCatching { GameMode.valueOf(previous) }.getOrDefault(GameMode.SURVIVAL)
+        }
+    }
+
+    /**
+     * Reduces an interaction range to 0 with a modifier, leaving the base value untouched
+     */
+    private fun restrictReach(player: Player, attr: Attribute, key: NamespacedKey) {
+        val instance = player.getAttribute(attr) ?: return
+        if (instance.getModifier(key) == null) {
+            instance.addTransientModifier(AttributeModifier(key, -1.0, AttributeModifier.Operation.MULTIPLY_SCALAR_1))
+        }
+    }
+
+    /**
+     * Removes the interaction range restriction again
+     */
+    private fun allowReach(player: Player, attr: Attribute, key: NamespacedKey) {
+        player.getAttribute(attr)?.removeModifier(key)
     }
 
     /**
@@ -211,21 +257,10 @@ class VisualService(
      * Restores a player to standard properties
      */
     private fun resetPlayer(player: Player) {
-        if (player.gameMode == GameMode.ADVENTURE) {
-            player.gameMode = GameMode.SURVIVAL
-        }
-
-        resetAttribute(player, Attribute.BLOCK_INTERACTION_RANGE)
-        resetAttribute(player, Attribute.ENTITY_INTERACTION_RANGE)
+        leaveAdventure(player)
+        allowReach(player, Attribute.BLOCK_INTERACTION_RANGE, blockReachKey)
+        allowReach(player, Attribute.ENTITY_INTERACTION_RANGE, entityReachKey)
         if (noCollideTeam.hasEntry(player.name)) noCollideTeam.removeEntry(player.name)
-    }
-
-    /**
-     * Resets a specific attribute to its vanilla default value
-     */
-    private fun resetAttribute(player: Player, attr: Attribute) {
-        val instance = player.getAttribute(attr) ?: return
-        instance.baseValue = attr.defaultValue
     }
 
     /**

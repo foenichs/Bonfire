@@ -57,7 +57,7 @@ class Bonfire : JavaPlugin() {
         val limitService = LimitService(config, db)
         protectionService = ProtectionService(registry)
         val escapeService = EscapeService(registry, protectionService, messenger, this)
-        visualService = VisualService(registry, protectionService, limitService, messenger, escapeService)
+        visualService = VisualService(this, registry, protectionService, limitService, messenger, escapeService)
         val migrationService = MigrationService(this, db, registry, protectionService)
 
         // Initialize map integrations (optional)
@@ -77,7 +77,7 @@ class Bonfire : JavaPlugin() {
         )
 
         // Initialize Listener
-        val playerListener = PlayerListener(this, visualService)
+        val playerListener = PlayerListener(this, visualService, migrationService)
 
         // Initialize Logic Service
         val claimService = ClaimService(registry, db, messenger, limitService, visualService, mapServices, migrationService, this)

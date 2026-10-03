@@ -7,13 +7,16 @@ import com.foenichs.bonfire.storage.ClaimRegistry
 import com.foenichs.bonfire.storage.DatabaseManager
 import org.bukkit.Bukkit
 import org.bukkit.Chunk
+import org.bukkit.NamespacedKey
 import org.bukkit.World
+import org.bukkit.attribute.Attribute
 import org.bukkit.configuration.file.YamlConfiguration
 import org.bukkit.entity.*
 import org.bukkit.event.EventHandler
 import org.bukkit.event.EventPriority
 import org.bukkit.event.Listener
 import org.bukkit.event.world.ChunkLoadEvent
+import org.bukkit.persistence.PersistentDataType
 import org.bukkit.plugin.java.JavaPlugin
 import org.yaml.snakeyaml.Yaml
 import java.io.File
@@ -27,6 +30,8 @@ class MigrationService(
 ) : Listener {
 
     private val requiredDataVersion = "1.6.0"
+    private val legacyReachKey = NamespacedKey(plugin, "legacy_reach_reset")
+    private val resetsLegacyReach: Boolean
 
     companion object {
         /**
@@ -155,12 +160,29 @@ class MigrationService(
                 deleteOrphanedRows()
                 db.fillMigrationQueue()
                 mergeNetherRoofClaims()
+                db.setMetadata("reset_legacy_reach", "true")
             }
             db.setMetadata("data_version", requiredDataVersion)
         }
+        resetsLegacyReach = db.getMetadata("reset_legacy_reach") == "true"
 
         if (db.getQueueSize() > 0) {
             Bukkit.getPluginManager().registerEvents(this, plugin)
+        }
+    }
+
+    /**
+     * Resets reach base values of 0 left by previous versions once per player
+     */
+    fun migratePlayer(player: Player) {
+        if (!resetsLegacyReach) return
+        val data = player.persistentDataContainer
+        if (data.has(legacyReachKey)) return
+        data.set(legacyReachKey, PersistentDataType.BOOLEAN, true)
+
+        listOf(Attribute.BLOCK_INTERACTION_RANGE, Attribute.ENTITY_INTERACTION_RANGE).forEach { attr ->
+            val instance = player.getAttribute(attr) ?: return@forEach
+            if (instance.baseValue == 0.0) instance.baseValue = attr.defaultValue
         }
     }
 

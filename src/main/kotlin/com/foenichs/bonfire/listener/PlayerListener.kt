@@ -2,6 +2,7 @@ package com.foenichs.bonfire.listener
 
 import com.foenichs.bonfire.Bonfire
 import com.foenichs.bonfire.model.ChunkPos
+import com.foenichs.bonfire.service.MigrationService
 import com.foenichs.bonfire.service.VisualService
 import org.bukkit.Bukkit
 import org.bukkit.event.EventHandler
@@ -15,7 +16,8 @@ import org.bukkit.event.player.PlayerTeleportEvent
 
 class PlayerListener(
     private val plugin: Bonfire,
-    private val visualService: VisualService
+    private val visualService: VisualService,
+    private val migrationService: MigrationService
 ) : Listener {
 
     /**
@@ -55,6 +57,7 @@ class PlayerListener(
     @EventHandler
     fun onJoin(event: PlayerJoinEvent) {
         val p = event.player
+        migrationService.migratePlayer(p)
         visualService.refresh(p, p.location)
         visualService.refreshForOwner(p.uniqueId)
     }
