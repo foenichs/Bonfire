@@ -46,7 +46,18 @@ class EntityProtectionListener(
         Bukkit.getScheduler().runTaskTimer(plugin, Runnable {
             checkLeashedMobs()
             checkTargetingMobs()
+            checkRiddenMobs()
         }, 1L, 1L)
+    }
+
+    /**
+     * Origin-tags mobs ridden into claims by authorized players
+     */
+    private fun checkRiddenMobs() {
+        Bukkit.getOnlinePlayers().forEach { player ->
+            val mount = player.vehicle as? Mob ?: return@forEach
+            originTagFor(player, mount)
+        }
     }
 
     /**
@@ -103,6 +114,11 @@ class EntityProtectionListener(
     }
 
     /**
+     * Checks if an entity is a rideable mob brought in from elsewhere
+     */
+    private fun isForeignMount(entity: Entity) = entity is Vehicle && entity is Mob && !protection.isOrigin(entity, entity.location)
+
+    /**
      * Checks if a holder can't lead a mob into a claim
      */
     private fun isLeashBlocked(holder: Player, mob: Mob, location: Location): Boolean {
@@ -138,7 +154,7 @@ class EntityProtectionListener(
         // Cushions, item frames and paintings are handled as blocks
         val isBlockRuled = target != null && claim.blockActions != "never" && protection.isBlockRuled(target)
 
-        if (isPet || isBlockRuled) {
+        if (isPet || isBlockRuled || (target != null && isForeignMount(target))) {
             visualService.setEntityException(player, location)
         } else {
             visualService.clearEntityException(player, location)
@@ -359,6 +375,7 @@ class EntityProtectionListener(
         // Authorized players and pet owners are not restricted
         if (protection.ownsEntity(player, entity)) return
         if (protection.canBypass(player, entity.location)) return
+        if (isForeignMount(entity)) return
 
         val claim = registry.getAt(entity.location) ?: return
         val rule = if (protection.isBlockRuled(entity)) claim.blockActions else claim.entityActions
