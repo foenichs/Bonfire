@@ -24,6 +24,11 @@ class VisualService(
     private val lastOwners = mutableMapOf<UUID, UUID?>()
     private val lastCommandStates = mutableMapOf<UUID, CommandState>()
     private val entityException = mutableSetOf<UUID>()
+    private val lastRefreshTicks = mutableMapOf<UUID, Int>()
+
+    companion object {
+        private const val REFRESH_INTERVAL_TICKS = 5
+    }
 
     /**
      * Data classes to track states for command tree refreshing
@@ -48,15 +53,22 @@ class VisualService(
      * Adds the player to the entity exception set, resetting ENTITY_INTERACTION_RANGE temporarily.
      */
     fun setEntityException(player: Player, location: Location = player.location) {
-        entityException.add(player.uniqueId)
-        refresh(player, location)
+        if (entityException.add(player.uniqueId)) refresh(player, location) else refreshThrottled(player, location)
     }
 
     /**
      * Removes the player from the entity exception set, restoring the restriction.
      */
     fun clearEntityException(player: Player, location: Location = player.location) {
-        entityException.remove(player.uniqueId)
+        if (entityException.remove(player.uniqueId)) refresh(player, location) else refreshThrottled(player, location)
+    }
+
+    /**
+     * Resyncs moving players, at most once every few ticks
+     */
+    private fun refreshThrottled(player: Player, location: Location) {
+        val last = lastRefreshTicks[player.uniqueId]
+        if (last != null && Bukkit.getCurrentTick() - last < REFRESH_INTERVAL_TICKS) return
         refresh(player, location)
     }
 
@@ -64,6 +76,7 @@ class VisualService(
      * Refresh a player's attributes, gamemode, collision, command tree, and action bar
      */
     fun refresh(player: Player, location: Location = player.location, forceActionBar: Boolean = false) {
+        lastRefreshTicks[player.uniqueId] = Bukkit.getCurrentTick()
         val claim = registry.getAt(location)
 
         // Manage dynamic command tree refreshes
@@ -191,6 +204,7 @@ class VisualService(
         lastOwners.remove(player.uniqueId)
         lastCommandStates.remove(player.uniqueId)
         entityException.remove(player.uniqueId)
+        lastRefreshTicks.remove(player.uniqueId)
     }
 
     /**

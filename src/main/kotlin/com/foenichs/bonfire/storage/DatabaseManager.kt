@@ -10,9 +10,11 @@ import java.sql.DriverManager
 import java.sql.SQLException
 import java.sql.Statement
 import java.util.UUID
+import java.util.concurrent.ConcurrentHashMap
 
 class DatabaseManager(dataFolder: File) {
     val connection: Connection = DriverManager.getConnection("jdbc:sqlite:${dataFolder.path}/claims.db")
+    private val limitOverrides = ConcurrentHashMap<UUID, Pair<Int, Int>>()
 
     init {
         if (!dataFolder.exists()) dataFolder.mkdirs()
@@ -163,15 +165,19 @@ class DatabaseManager(dataFolder: File) {
 
     fun close() = connection.close()
 
-    fun getLimitOverride(u: UUID): Pair<Int, Int> {
+    /**
+     * Cached, as limits are read on every player refresh
+     */
+    fun getLimitOverride(u: UUID): Pair<Int, Int> = limitOverrides.getOrPut(u) {
         val ps = connection.prepareStatement("SELECT extra_chunks, extra_claims FROM limit_overrides WHERE player_uuid = ?")
         ps.setString(1, u.toString())
         val rs = ps.executeQuery()
-        return if (rs.next()) rs.getInt("extra_chunks") to rs.getInt("extra_claims") else 0 to 0
+        if (rs.next()) rs.getInt("extra_chunks") to rs.getInt("extra_claims") else 0 to 0
     }
 
     fun setLimitOverride(u: UUID, extraChunks: Int, extraClaims: Int) {
         val ps = connection.prepareStatement("INSERT OR REPLACE INTO limit_overrides (player_uuid, extra_chunks, extra_claims) VALUES (?, ?, ?)")
         ps.setString(1, u.toString()); ps.setInt(2, extraChunks); ps.setInt(3, extraClaims); ps.executeUpdate()
+        limitOverrides[u] = extraChunks to extraClaims
     }
 }

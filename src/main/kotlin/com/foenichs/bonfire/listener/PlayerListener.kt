@@ -5,7 +5,9 @@ import com.foenichs.bonfire.model.ChunkPos
 import com.foenichs.bonfire.service.VisualService
 import org.bukkit.Bukkit
 import org.bukkit.event.EventHandler
+import org.bukkit.event.EventPriority
 import org.bukkit.event.Listener
+import org.bukkit.event.player.PlayerGameModeChangeEvent
 import org.bukkit.event.player.PlayerJoinEvent
 import org.bukkit.event.player.PlayerMoveEvent
 import org.bukkit.event.player.PlayerQuitEvent
@@ -34,6 +36,17 @@ class PlayerListener(
     @EventHandler
     fun onTeleport(event: PlayerTeleportEvent) {
         visualService.refresh(event.player, event.to)
+    }
+
+    /**
+     * Resyncs players after their game mode changed
+     */
+    @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
+    fun onGameModeChange(event: PlayerGameModeChangeEvent) {
+        val p = event.player
+        Bukkit.getScheduler().runTask(plugin, Runnable {
+            if (p.isOnline) visualService.refresh(p)
+        })
     }
 
     /**
