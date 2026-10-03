@@ -123,7 +123,7 @@ class EntityProtectionListener(
      */
     private fun isLeashBlocked(holder: Player, mob: Mob, location: Location): Boolean {
         val claim = registry.getAt(location) ?: return false
-        return claim.entityActions != "always" && !protection.canBypass(holder, location) && !protection.isOrigin(mob, location)
+        return claim.entityActions != "always" && !protection.canBypass(holder, location) && !protection.isOrigin(mob, location) && !isForeignMount(mob)
     }
 
     /**
@@ -202,7 +202,10 @@ class EntityProtectionListener(
         // Authorized players and pet owners are not restricted
         if (protection.ownsEntity(player, entity)) return
 
-        // Origin-tagged mobs may be tied to fences in their claim
+        // Foreign mounts may be leashed to players
+        if (event.leashHolder is Player && isForeignMount(entity)) return
+
+        // Origin-tagged mobs may be leashed to fences in their claim
         if (event.leashHolder !is Player && protection.isOrigin(entity, event.leashHolder.location)) return
 
         // Holder stands in a claim the mob can't be led into
