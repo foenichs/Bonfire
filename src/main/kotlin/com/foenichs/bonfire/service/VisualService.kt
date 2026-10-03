@@ -184,7 +184,7 @@ class VisualService(
         val l = limits.getLimits(player)
         val canClaim = claim == null && registry.getOwnedChunks(player.uniqueId) < l.maxChunks &&
                 (registry.getOwnedClaimsCount(player.uniqueId) < l.maxClaims ||
-                        !ClaimService.isNewClaim(registry.getAll(), player.uniqueId, location))
+                        !ClaimService.isNewClaim(registry, player.uniqueId, location))
         val canEscape = escape.isRestricted(player, location)
         val isStrictOwner = claim != null && claim.owner == player.uniqueId
         val canRemove = claim != null && isStrictOwner && (claim.trustedAlways.isNotEmpty() || claim.trustedOnline.isNotEmpty())

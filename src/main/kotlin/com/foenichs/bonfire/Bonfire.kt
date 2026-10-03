@@ -50,7 +50,7 @@ class Bonfire : JavaPlugin() {
 
         // Initialize Database and Memory Cache
         db = DatabaseManager(dataFolder)
-        registry = ClaimRegistry(db.loadAll().toMutableList())
+        registry = ClaimRegistry(db.loadAll())
 
         // Initialize Services
         val messenger = Messenger()

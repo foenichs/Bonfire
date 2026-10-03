@@ -4,7 +4,6 @@ import com.foenichs.bonfire.Bonfire
 import com.foenichs.bonfire.model.ChunkLayer
 import com.foenichs.bonfire.model.ChunkPos
 import com.foenichs.bonfire.model.Claim
-import com.foenichs.bonfire.model.opposite
 import com.foenichs.bonfire.service.map.ClaimMapService
 import com.foenichs.bonfire.storage.ClaimRegistry
 import com.foenichs.bonfire.storage.DatabaseManager
@@ -14,7 +13,6 @@ import net.kyori.adventure.text.Component
 import net.kyori.adventure.text.format.NamedTextColor
 import net.kyori.adventure.text.format.TextDecoration
 import org.bukkit.Bukkit
-import org.bukkit.Chunk
 import org.bukkit.Location
 import org.bukkit.World
 import org.bukkit.entity.Player
@@ -48,10 +46,10 @@ class ClaimService(
         if (registry.getAt(w, k, layer) != null) return
         if (registry.getOwnedChunks(p.uniqueId) >= lim.maxChunks) return
 
-        val adj = findAdjacentClaims(registry.getAll(), p.uniqueId, loc)
+        val adj = findAdjacentClaims(registry, p.uniqueId, loc)
         when {
             adj.size == 1 -> {
-                val c = adj.first(); val pos = ChunkPos(w, k, layer); c.chunks.add(pos); db.addChunk(c.id!!, pos)
+                val c = adj.first(); val pos = ChunkPos(w, k, layer); registry.addChunk(c, pos); db.addChunk(c.id!!, pos)
                 migrationService.processChunk(ch)
                 updateClaimMarkers(c)
                 msg.send(p, Component.text("Successfully claimed this $word and added it to your claim."))
@@ -256,7 +254,7 @@ class ClaimService(
      */
     private fun executeMerge(p: Player, m: PendingMerge) {
         val main = m.claims.first(); val pos = ChunkPos(m.worldUuid, m.chunkKey, m.layer)
-        db.addChunk(main.id!!, pos); main.chunks.add(pos)
+        db.addChunk(main.id!!, pos); registry.addChunk(main, pos)
         migrationService.processChunk(p.location.chunk)
 
         m.claims.drop(1).forEach { d ->
@@ -266,7 +264,7 @@ class ClaimService(
             db.addAlias(main.id!!, id); db.moveAliases(id, main.id!!)
 
             db.deleteClaim(id)
-            main.chunks.addAll(d.chunks)
+            registry.addChunks(main, d.chunks)
             registry.remove(d); removeClaimMarkers(id, wid)
         }
         updateClaimMarkers(main)
@@ -284,7 +282,7 @@ class ClaimService(
     }
 
     private fun handleChunkUnclaim(c: Claim, pos: ChunkPos) {
-        c.chunks.remove(pos); db.removeChunk(c.id!!, pos)
+        registry.removeChunk(c, pos); db.removeChunk(c.id!!, pos)
         db.removeFromQueue(pos.worldUuid, pos.chunkKey)
         updateClaimMarkers(c)
     }
@@ -301,15 +299,7 @@ class ClaimService(
         val rem = c.chunks.filter { it != r }; if (rem.isEmpty()) return true
         val start = rem.first(); val vis = mutableSetOf<ChunkPos>(); val q: Queue<ChunkPos> = LinkedList(); q.add(start); vis.add(start)
         while (q.isNotEmpty()) {
-            val curr = q.poll(); val x = curr.chunkKey.toInt(); val z = (curr.chunkKey shr 32).toInt()
-            val neighbors = listOf(
-                ChunkPos(curr.worldUuid, Chunk.getChunkKey(x+1,z), curr.layer),
-                ChunkPos(curr.worldUuid, Chunk.getChunkKey(x-1,z), curr.layer),
-                ChunkPos(curr.worldUuid, Chunk.getChunkKey(x,z+1), curr.layer),
-                ChunkPos(curr.worldUuid, Chunk.getChunkKey(x,z-1), curr.layer),
-                ChunkPos(curr.worldUuid, curr.chunkKey, curr.layer.opposite())
-            )
-            neighbors.forEach { p -> if (rem.contains(p) && vis.add(p)) q.add(p) }
+            q.poll().neighbors().forEach { p -> if (rem.contains(p) && vis.add(p)) q.add(p) }
         }
         return vis.size == rem.size
     }
@@ -318,19 +308,10 @@ class ClaimService(
         fun chunkWord(loc: Location, layer: ChunkLayer = ChunkPos.layerFor(loc)) =
             if (loc.world.environment == World.Environment.NETHER) { if (layer == ChunkLayer.ROOF) "roof chunk" else "ground chunk" } else "chunk"
 
-        fun findAdjacentClaims(claims: List<Claim>, owner: UUID, location: Location): List<Claim> {
-            val ch = location.chunk; val w = ch.world.uid; val layer = ChunkPos.layerFor(location)
-            val horizontalKeys = listOf(Chunk.getChunkKey(ch.x + 1, ch.z), Chunk.getChunkKey(ch.x - 1, ch.z), Chunk.getChunkKey(ch.x, ch.z + 1), Chunk.getChunkKey(ch.x, ch.z - 1))
-            return claims.filter { c ->
-                c.owner == owner && c.chunks.any { cp ->
-                    cp.worldUuid == w && (
-                            (cp.layer == layer && horizontalKeys.contains(cp.chunkKey)) ||
-                                    (cp.layer == layer.opposite() && cp.chunkKey == ch.chunkKey)
-                            )
-                }
-            }
+        fun findAdjacentClaims(registry: ClaimRegistry, owner: UUID, location: Location): List<Claim> {
+            return ChunkPos.of(location).neighbors().mapNotNull { registry.getAt(it) }.filter { it.owner == owner }.distinctBy { it.id }
         }
 
-        fun isNewClaim(claims: List<Claim>, owner: UUID, location: Location) = findAdjacentClaims(claims, owner, location).isEmpty()
+        fun isNewClaim(registry: ClaimRegistry, owner: UUID, location: Location) = findAdjacentClaims(registry, owner, location).isEmpty()
     }
 }

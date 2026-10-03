@@ -215,7 +215,7 @@ class MigrationService(
 
             netherGroundChunks.forEach { pos ->
                 val roofPos = ChunkPos(pos.worldUuid, pos.chunkKey, ChunkLayer.ROOF)
-                claim.chunks.add(roofPos)
+                registry.addChunk(claim, roofPos)
                 db.addChunk(claim.id!!, roofPos)
             }
         }
