@@ -32,10 +32,18 @@ class BlockProtectionListener(
 ) : Listener {
 
     /**
-     * Helper for permission checks
+     * Checks if a player can't break or place at a location
      */
     private fun isActionBlocked(player: Player, location: Location, rule: (Claim) -> String = { it.blockActions }): Boolean {
         if (protection.canBypass(player, location)) return false
+        val claim = registry.getAt(location) ?: return false
+        return rule(claim) != "always"
+    }
+
+    /**
+     * Checks if a break without a responsible player, e.g. by dispensers, is blocked
+     */
+    private fun isUnattributedBlocked(location: Location, rule: (Claim) -> String = { it.blockActions }): Boolean {
         val claim = registry.getAt(location) ?: return false
         return rule(claim) != "always"
     }
@@ -100,9 +108,12 @@ class BlockProtectionListener(
             return
         }
 
+        if (event !is HangingBreakByEntityEvent) return
+
         // The responsible player, also when shooting projectiles
-        val remover = (event as? HangingBreakByEntityEvent)?.damageSource?.causingEntity as? Player ?: return
-        if (isActionBlocked(remover, location, rule)) {
+        val remover = event.damageSource.causingEntity as? Player
+        val blocked = if (remover != null) isActionBlocked(remover, location, rule) else isUnattributedBlocked(location, rule)
+        if (blocked) {
             event.isCancelled = true
         }
     }
@@ -142,9 +153,12 @@ class BlockProtectionListener(
             return
         }
 
+        if (cause.name != "ENTITY") return
+
         // The responsible player, also when shooting projectiles
-        val remover = damageSource?.causingEntity as? Player ?: return
-        if (isActionBlocked(remover, location)) {
+        val remover = damageSource?.causingEntity as? Player
+        val blocked = if (remover != null) isActionBlocked(remover, location) else isUnattributedBlocked(location)
+        if (blocked) {
             (event as Cancellable).isCancelled = true
         }
     }

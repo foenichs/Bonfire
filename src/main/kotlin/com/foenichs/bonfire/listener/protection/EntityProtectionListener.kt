@@ -269,8 +269,10 @@ class EntityProtectionListener(
         if (protection.isBlockRuled(victim)) {
             val blocked = if (event.cause == DamageCause.ENTITY_EXPLOSION || event.cause == DamageCause.BLOCK_EXPLOSION) {
                 protection.isExplosionBlocked(event.damager, victimLocation)
+            } else if (damager != null) {
+                !protection.canBypass(damager, victimLocation) && claim.blockActions == "never"
             } else {
-                damager != null && !protection.canBypass(damager, victimLocation) && claim.blockActions == "never"
+                claim.blockActions != "always"
             }
             if (blocked) event.isCancelled = true
             return
