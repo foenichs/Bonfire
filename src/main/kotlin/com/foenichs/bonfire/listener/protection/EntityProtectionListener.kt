@@ -6,7 +6,9 @@ import com.foenichs.bonfire.service.ProtectionService
 import com.foenichs.bonfire.service.VisualService
 import com.foenichs.bonfire.storage.ClaimRegistry
 import io.papermc.paper.event.player.PlayerNameEntityEvent
+import io.papermc.paper.event.player.PrePlayerAttackEntityEvent
 import org.bukkit.Bukkit
+import org.bukkit.GameMode
 import org.bukkit.Location
 import org.bukkit.Material
 import org.bukkit.entity.*
@@ -14,6 +16,7 @@ import org.bukkit.event.Cancellable
 import org.bukkit.event.EventHandler
 import org.bukkit.event.EventPriority
 import org.bukkit.event.Listener
+import org.bukkit.event.entity.EntityCombustByEntityEvent
 import org.bukkit.event.entity.EntityDamageByEntityEvent
 import org.bukkit.event.entity.EntityDamageEvent.DamageCause
 import org.bukkit.event.entity.EntityEnterLoveModeEvent
@@ -41,6 +44,11 @@ class EntityProtectionListener(
 
     private val leashedMobs = mutableSetOf<UUID>()
     private val targetingMobs = mutableSetOf<UUID>()
+    private val armorStandHits = mutableMapOf<UUID, Long>()
+
+    private companion object {
+        const val ARMOR_STAND_BREAK_TICKS = 6L
+    }
 
     init {
         Bukkit.getScheduler().runTaskTimer(plugin, Runnable {
@@ -306,6 +314,12 @@ class EntityProtectionListener(
         // Mobs and world damage can only affect authorized players
         if (damager == null && victim is Player && protection.canBypass(victim, victimLocation)) return
 
+        // Armor stands may be hit but only broken as a block
+        if (victim is ArmorStand && damager != null && claim.entityActions == "always" && claim.blockActions != "always" && !wobbles(victim, event.damager)) {
+            event.isCancelled = true
+            return
+        }
+
         // Enforcement for unauthorized actors
         if (claim.entityActions != "always") {
 
@@ -324,6 +338,52 @@ class EntityProtectionListener(
 
             event.isCancelled = true
         }
+    }
+
+    /**
+     * Hitting armor stands in adventure mode
+     */
+    @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
+    fun onArmorStandAttack(event: PrePlayerAttackEntityEvent) {
+        val stand = event.attacked as? ArmorStand ?: return
+        val player = event.player
+        if (player.gameMode != GameMode.ADVENTURE) return
+        if (protection.canBypass(player, stand.location)) return
+        val claim = registry.getAt(stand.location) ?: return
+        if (claim.entityActions != "always") return
+
+        // Players have to hit in survival mode for one tick
+        Bukkit.getScheduler().runTask(plugin, Runnable { if (player.isOnline) player.gameMode = GameMode.ADVENTURE })
+        player.gameMode = GameMode.SURVIVAL
+    }
+
+    /**
+     * Armor stands set on fire by players, e.g. with fire aspect
+     */
+    @EventHandler(priority = EventPriority.LOWEST, ignoreCancelled = true)
+    fun onArmorStandCombust(event: EntityCombustByEntityEvent) {
+        val stand = event.entity as? ArmorStand ?: return
+        val player = when (val source = event.combuster) {
+            is Player -> source
+            is Projectile -> source.shooter as? Player
+            else -> null
+        } ?: return
+        if (protection.canBypass(player, stand.location)) return
+        val claim = registry.getAt(stand.location) ?: return
+        if (claim.blockActions != "always") event.isCancelled = true
+    }
+
+    /**
+     * Checks if a hit only makes an armor stand wobble instead of breaking it
+     */
+    private fun wobbles(stand: ArmorStand, attacker: Entity): Boolean {
+        if (attacker !is Player) return false
+        // Two hits within a few ticks break it
+        val now = stand.world.gameTime
+        armorStandHits.values.removeIf { now - it > ARMOR_STAND_BREAK_TICKS }
+        if (armorStandHits.containsKey(stand.uniqueId)) return false
+        armorStandHits[stand.uniqueId] = now
+        return true
     }
 
     /**
